@@ -1,24 +1,45 @@
 #include "cmd.h"
+#include <stdlib.h>
+#include <string.h>
 
-bool parse(char *cmd);
+void execute_cmd(char *cmd, char **args);
 
 bool prompt(struct Window *window) {
     // Prompt the user for a command
-    curs_set(1);
-    echo();
-    mvwaddch(window->cmd, 1, 0, ':');
-    wrefresh(window->cmd);
     char buffer[256];
-    mvwgetnstr(window->cmd, 1, 1, buffer, 256);
-    curs_set(0);
-    noecho();
+    draw_cmd_window_prompt(window, buffer);
 
     // Parse the entered command
-    return parse(buffer);
+    bool close = parse(buffer);
+    
+    draw_cmd_window_blank(window);
+
+    return close;
 }
 
-bool parse(char *cmd) {
+bool parse(const char *str) {
+    char *string = malloc(strlen(str) + 1);
+    strcpy(string, str);    
+
+    // Count the tokens in the command
+    int token_count = 1;
+    strtok(string, " \t");
+    while (strtok(NULL, " \t") != NULL)
+        token_count += 1;
+
+    // Separate the string into tokens by ' '
+    strcpy(string, str);
+    char *cmd = strtok(string, " \t");
+    char **args = calloc(token_count, sizeof(char *));
+    for (int i = 0; i < token_count; ++i)
+        args[i] = strtok(NULL, " \t");
+
     if (strcmp(cmd, "q") == 0)
         return false;
+    execute_cmd(cmd, args);
     return true;
+}
+
+void execute_cmd(char *cmd, char **args) {
+
 }
