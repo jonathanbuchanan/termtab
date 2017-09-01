@@ -1,12 +1,5 @@
 #include "draw.h"
 #include <stdlib.h>
-#include <ncurses.h>
-
-struct Window {
-    WINDOW *term;
-    WINDOW *tab;
-    WINDOW *cmd;
-};
 
 // Creates the window for the tab editor
 void init_tab_window(struct Window *window);
@@ -21,7 +14,7 @@ struct Window * init_window() {
     w->term = initscr();
     init_tab_window(w);
     init_cmd_window(w);
-    draw_tab_window(w);
+    draw(w);
     return w;
 }
 
@@ -54,6 +47,14 @@ void init_cmd_window(struct Window *window) {
 
 
 
+void draw(struct Window *window) {
+    draw_tab_window(window);
+    draw_cmd_window(window);
+}
+
+
+
+
 void draw_tab_window(struct Window *window) {
     int y, x;
     getmaxyx(window->term, y, x);
@@ -61,4 +62,9 @@ void draw_tab_window(struct Window *window) {
     for (int y = 7; y < 19; y += 2)
         mvwhline(window->tab, y, 0, '-', x);
     wrefresh(window->tab);
+}
+
+void draw_cmd_window(struct Window *window) {
+    wbkgd(window->cmd, COLOR_PAIR(1));
+    wrefresh(window->cmd);
 }

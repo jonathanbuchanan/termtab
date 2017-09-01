@@ -1,8 +1,30 @@
 #include "draw.h"
+#include "cmd.h"
+#include <ncurses.h>
+
+// Processes character input (return false to exit, true to continue)
+bool input(char c, struct Window *window);
 
 int main(int argc, char **argv) {
     struct Window *w = init_window();
-    sleep(5);
+    noecho();
+    keypad(stdscr, TRUE);
+    curs_set(0);
+    refresh();
+    draw(w);
+    while (input(getch(), w)) {
+        draw(w);
+    }
     kill_window(w);
     return 0;
+}
+
+bool input(char c, struct Window *window) {
+    switch (c) {
+    case ':':
+        // Prompt for a command (triggered by ':')
+        return prompt(window);
+    default:
+        return true;
+    }
 }
