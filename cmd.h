@@ -10,7 +10,9 @@ bool parse(const char *cmd);
 
 
 
-// Below are the actual commands to be executed
-
+// *** Below are the actual commands to be executed ***
+// Opens a file for editing
+#define CMD_EDIT "edit"
+void edit(char *file);
 
 #endif

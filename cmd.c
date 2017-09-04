@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "tab.h"
+
 void execute_cmd(char *cmd, char **args);
 
 bool prompt(struct Window *window) {
@@ -41,5 +43,12 @@ bool parse(const char *str) {
 }
 
 void execute_cmd(char *cmd, char **args) {
+    if (strcmp(cmd, CMD_EDIT) == 0)
+        edit(args[0]);
+}
 
+
+
+void edit(char *file) {
+    open_tab(file);
 }
