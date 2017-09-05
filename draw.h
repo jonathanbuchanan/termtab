@@ -4,6 +4,7 @@
 #include <ncurses.h>
 
 struct Window;
+struct Tab;
 
 // Creates the main window and initializes ncurses
 struct Window * init_window();
@@ -11,7 +12,12 @@ struct Window * init_window();
 void kill_window(const struct Window *);
 // Draws all the windows
 void draw(struct Window *);
+void draw_with_tab(struct Window *, struct Tab *);
 void draw_cmd_window_blank(struct Window *);
 void draw_cmd_window_prompt(struct Window *, char *);
+void draw_tab_window_blank(struct Window *);
+void draw_tab_window(struct Window *, struct Tab *);
+
+int cmd_getch(struct Window *);
 
 #endif

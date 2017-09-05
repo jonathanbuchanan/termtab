@@ -41,6 +41,10 @@ struct TabInfo {
     struct Tuning tuning;
 };
 
+struct Tab {
+    struct TabInfo info;
+};
+
 // Loads a tab from a file
 void open_tab(const char *file);
 
