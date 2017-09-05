@@ -24,10 +24,14 @@ bool parse(const char *str) {
     strcpy(string, str);    
 
     // Count the tokens in the command
-    int token_count = 1;
-    strtok(string, " \t");
+    int token_count = 0;
+    if (strtok(string, " \t") != NULL)
+        token_count += 1;
     while (strtok(NULL, " \t") != NULL)
         token_count += 1;
+
+    if (token_count < 1)
+        return true;
 
     // Separate the string into tokens by ' '
     strcpy(string, str);
