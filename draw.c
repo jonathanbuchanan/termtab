@@ -5,11 +5,13 @@
 struct Window {
     WINDOW *term;
     WINDOW *tab;
+    WINDOW *status;
     WINDOW *cmd;
 };
 
 // Creates the window for the tab editor
 void init_tab_window(struct Window *window);
+void init_status_window(struct Window *window);
 void init_cmd_window(struct Window *window);
 
 // Begins text input by turning on echo and cursor
@@ -21,6 +23,7 @@ struct Window * init_window() {
     struct Window *w = malloc(sizeof(struct Window));
     w->term = initscr();
     init_tab_window(w);
+    init_status_window(w);
     init_cmd_window(w);
     draw(w);
     return w;
@@ -40,7 +43,19 @@ void init_tab_window(struct Window *window) {
     window->tab = tab;
 }
 
-#define CMD_WINDOW_HEIGHT 2
+#define STATUS_WINDOW_HEIGHT 1
+void init_status_window(struct Window *window) {
+    int y, x;
+    getmaxyx(window->term, y, x);
+    WINDOW *status = newwin(STATUS_WINDOW_HEIGHT, x, y - STATUS_WINDOW_HEIGHT - 1, 0);
+    start_color();
+    init_pair(2, COLOR_BLACK, COLOR_WHITE);
+    wbkgd(status, COLOR_PAIR(2));
+    wrefresh(status);
+    window->status = status;
+}
+
+#define CMD_WINDOW_HEIGHT 1
 void init_cmd_window(struct Window *window) {
     int y, x;
     getmaxyx(window->term, y, x);
@@ -57,11 +72,13 @@ void init_cmd_window(struct Window *window) {
 
 void draw(struct Window *window) {
     draw_tab_window_blank(window);
+    draw_status_window_blank(window);
     draw_cmd_window_blank(window);
 }
 
 void draw_with_tab(struct Window *window, struct Tab *tab) {
     draw_tab_window(window, tab);
+    draw_status_window_blank(window);
     draw_cmd_window_blank(window);
 }
 
@@ -85,8 +102,14 @@ void draw_tab_window_blank(struct Window *window) {
 }
 
 void draw_tab_window(struct Window *window, struct Tab *tab) {
+    wclear(window->tab);
+
     int height, width;
     getmaxyx(window->term, height, width);
+    // Title and band
+    mvwprintw(window->tab, 0, 0, "Title: %s", tab->info.title);
+    mvwprintw(window->tab, 1, 0, "Author: %s", tab->info.band);
+
     // Draw tuning and lines
     for (int i = 0; i < 6; ++i) {
         int y = 7 + (2 * i);
@@ -109,6 +132,21 @@ void draw_tab_window(struct Window *window, struct Tab *tab) {
     wrefresh(window->tab);
 }
 
+void draw_status_window_clear(struct Window *window) {
+    werase(window->status);
+    wrefresh(window->status);
+}
+
+void draw_status_window_blank(struct Window *window) {
+    wrefresh(window->status);
+}
+
+void draw_status_window_msg(struct Window *window, const char *msg) {
+    werase(window->status);
+    mvwprintw(window->status, 0, 0, msg);
+    wrefresh(window->status);
+}
+
 void draw_cmd_window_blank(struct Window *window) {
     werase(window->cmd);
     wrefresh(window->cmd);
@@ -116,9 +154,9 @@ void draw_cmd_window_blank(struct Window *window) {
 
 void draw_cmd_window_prompt(struct Window *window, char *buffer) {
     begin_input();
-    mvwaddch(window->cmd, 1, 0, ':');
+    mvwaddch(window->cmd, 0, 0, ':');
     wrefresh(window->cmd);
-    mvwgetstr(window->cmd, 1, 1, buffer);
+    mvwgetstr(window->cmd, 0, 1, buffer);
     end_input();
 }
 
