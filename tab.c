@@ -28,3 +28,9 @@ void tone_to_string(struct Tone tone, char *buffer, size_t n) {
 void open_tab(const char *file) {
     struct Tuning t = STANDARD_TUNING;
 }
+
+void save_tab(const struct Tab *tab, const char *file) {
+    FILE *f = fopen(file, "w");
+
+    fclose(f);
+}

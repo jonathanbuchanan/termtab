@@ -43,9 +43,13 @@ struct TabInfo {
 
 struct Tab {
     struct TabInfo info;
+    char *file;
 };
 
 // Loads a tab from a file
 void open_tab(const char *file);
+
+// Saves a tab to a file
+void save_tab(const struct Tab *tab, const char *file);
 
 #endif

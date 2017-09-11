@@ -15,12 +15,16 @@ bool parse(struct Window *window, struct Tab *tab, const char *cmd);
 #define CMD_EDIT "edit"
 void edit(char *file);
 
+// Saves a file (file is optional if already known in Tab struct)
+#define CMD_SAVE "save"
+void save(struct Tab *tab, char *file);
+
 // Sets the title of the tab
 #define CMD_TITLE "title"
-void title(struct Window *window, struct Tab *tab, char *title);
+void title(struct Tab *tab, char *title);
 
 // Sets the author of the tab
 #define CMD_AUTHOR "author"
-void author(struct Window *window, struct Tab *tab, char *author);
+void author(struct Tab *tab, char *author);
 
 #endif

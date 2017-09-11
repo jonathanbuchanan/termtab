@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
     noecho();
     keypad(stdscr, TRUE);
     curs_set(0);
-    struct Tab t = {{NULL, NULL, STANDARD_TUNING}};
+    struct Tab t = {{NULL, NULL, STANDARD_TUNING}, NULL};
 
     do {
         draw_with_tab(w, &t);
