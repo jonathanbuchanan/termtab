@@ -13,7 +13,7 @@ bool parse(struct Window *window, struct Tab *tab, const char *cmd);
 // *** Below are the actual commands to be executed ***
 // Opens a file for editing
 #define CMD_EDIT "edit"
-void edit(char *file);
+void edit(struct Tab *tab, char *file);
 
 // Saves a file (file is optional if already known in Tab struct)
 #define CMD_SAVE "save"

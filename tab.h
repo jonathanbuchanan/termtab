@@ -46,8 +46,8 @@ struct Tab {
     char *file;
 };
 
-// Loads a tab from a file
-void open_tab(const char *file);
+// Loads a tab from a file into the pointed-to tab
+void open_tab(struct Tab *tab, const char *file);
 
 // Saves a tab to a file
 void save_tab(const struct Tab *tab, const char *file);

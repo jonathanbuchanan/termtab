@@ -138,7 +138,7 @@ void execute_cmd(struct Window *window, struct Tab *tab, struct Command *cmd) {
             cmd_error(window, CMD_MISSING_ARG);
             return;
         }
-        edit(arg);
+        edit(tab, arg);
     } else if (strcmp(cmd->cmd, CMD_SAVE) == 0) {
         char arg[256];
         if (get_arg(cmd, 0, arg) == false) {
@@ -185,12 +185,12 @@ void cmd_error(struct Window *window, int code) {
 
 
 
-void edit(char *file) {
-    open_tab(file);
+void edit(struct Tab *tab, char *file) {
+    open_tab(tab, file);
 }
 
 void save(struct Tab *tab, char *file) {
-
+    save_tab(tab, file);
 }
 
 void title(struct Tab *tab, char *title) {
