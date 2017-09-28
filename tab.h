@@ -31,9 +31,9 @@ struct Tone {
 void tone_to_string(struct Tone tone, char *buffer, size_t n);
 
 struct Tuning {
-    struct Tone string_1, string_2, string_3, string_4, string_5, string_6;
+    struct Tone strings[6];
 };
-#define STANDARD_TUNING (struct Tuning){{E, Natural, 4}, {B, Natural, 3}, {G, Natural, 3}, {D, Natural, 3}, {A, Natural, 2}, {E, Natural, 2}}
+#define STANDARD_TUNING {.strings = {{E, Natural, 4}, {B, Natural, 3}, {G, Natural, 3}, {D, Natural, 3}, {A, Natural, 2}, {E, Natural, 2}}}
 
 struct TabInfo {
     char *title;

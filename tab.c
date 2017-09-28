@@ -57,6 +57,7 @@ void open_tab(struct Tab *t, const char *file) {
 
         const char title_code[] = {0x00, 0x01};
         const char author_code[] = {0x00, 0x02};
+        const char tuning_code[] = {0x00, 0x03};
         const char end_of_file[] = {0xFF, 0xFF};
 
         if (block[0] == title_code[0] && block[1] == title_code[1]) {
@@ -71,6 +72,19 @@ void open_tab(struct Tab *t, const char *file) {
             fread(t->info.band, sizeof(char), len, f);
         } else if (block[0] == end_of_file[0] && block[1] == end_of_file[1]) {
             break;
+        } else if (block[0] == tuning_code[0] && block[1] == tuning_code[1]) {
+            for (int i = 0; i < 6; ++i) {
+                struct Tone *tone = &t->info.tuning.strings[i];
+                int note;
+                fread(&note, sizeof(int), 1, f);
+                int shift;
+                fread(&shift, sizeof(int), 1, f);
+                int octave;
+                fread(&octave, sizeof(int), 1, f);
+                tone->note = note;
+                tone->shift = shift;
+                tone->octave = octave;
+            }
         }
     }
 
@@ -87,11 +101,12 @@ void open_tab(struct Tab *t, const char *file) {
 
 /// Title
 // 0x00 0x01
-// length (int) (includes the \0)
+// length (int)
 // (c string)
 
 /// Author
 // 0x00 0x02
+// length (int)
 // (c string)
 
 /// Tuning
@@ -127,6 +142,20 @@ void save_tab(const struct Tab *tab, const char *file) {
     int author_len = strlen(tab->info.band) + 1;
     fwrite(&author_len, sizeof(int), 1, f);
     fwrite(tab->info.band, sizeof(char), strlen(tab->info.band) + 1, f);
+
+
+    const char tuning_code[] = {0x00, 0x03};
+    fwrite(tuning_code, sizeof(char), 2, f);
+    for (int i = 0; i < 6; ++i) {
+        struct Tone tone = tab->info.tuning.strings[i];
+        // Note
+        fwrite(&tone.note, sizeof(int), 1, f);
+        // Shift
+        fwrite(&tone.shift, sizeof(int), 1, f);
+        // Octave
+        fwrite(&tone.octave, sizeof(int), 1, f);
+    }
+
 
     const char end_of_file[] = {0xFF, 0xFF};
     fwrite(end_of_file, sizeof(char), 2, f);

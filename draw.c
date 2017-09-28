@@ -114,14 +114,7 @@ void draw_tab_window(struct Window *window, struct Tab *tab) {
     for (int i = 0; i < 6; ++i) {
         int y = 7 + (2 * i);
         char buff[5];
-        switch (i) {
-            case 0: tone_to_string(tab->info.tuning.string_1, buff, 5); break;
-            case 1: tone_to_string(tab->info.tuning.string_2, buff, 5); break;
-            case 2: tone_to_string(tab->info.tuning.string_3, buff, 5); break;
-            case 3: tone_to_string(tab->info.tuning.string_4, buff, 5); break;
-            case 4: tone_to_string(tab->info.tuning.string_5, buff, 5); break;
-            case 5: tone_to_string(tab->info.tuning.string_6, buff, 5); break;
-        }
+        tone_to_string(tab->info.tuning.strings[i], buff, 5);
         mvwprintw(window->tab, y, 0, buff);
         mvwhline(window->tab, y, 6, '-', width);
     }
