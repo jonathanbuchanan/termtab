@@ -79,13 +79,13 @@ bool tokenize(const char *string, struct Command *command) {
 }
 
 // Executes a command
-void execute_cmd(struct Window *window, struct Tab *tab, struct Command *cmd);
+void execute_cmd(struct State *s, struct Command *cmd);
 
 // If an argument at the index is found, it is copied into the buffer and true is returned
 bool get_arg(struct Command *cmd, int n, char *buff);
 
 // Raises an error
-void cmd_error(struct Window *window, int code);
+void cmd_error(struct State *s, int code);
 
 #define CMD_MISSING_ARG 1
 #define CMD_MISSING_ARG_MSG "The command is missing an argument."
@@ -95,20 +95,20 @@ void cmd_error(struct Window *window, int code);
 
 
 
-bool prompt(struct Window *window, struct Tab *tab) {
+bool prompt(struct State *s) {
     // Prompt the user for a command
     char buffer[256];
-    draw_cmd_window_prompt(window, buffer);
+    draw_cmd_window_prompt(s->window, buffer);
 
     // Parse the entered command
-    bool close = parse(window, tab, buffer);
+    bool close = parse(s, buffer);
     
-    draw_cmd_window_blank(window);
+    draw_cmd_window_blank(s->window);
 
     return close;
 }
 
-bool parse(struct Window *window, struct Tab *tab, const char *str) {
+bool parse(struct State *s, const char *str) {
     struct Command cmd = {};
 
     char string[256];
@@ -117,7 +117,7 @@ bool parse(struct Window *window, struct Tab *tab, const char *str) {
     cmd.args = calloc(16, sizeof(char *));
     if (tokenize(string, &cmd) == false) {
         // Tokenization resulted in error
-        cmd_error(window, CMD_PARSING_ERR);
+        cmd_error(s, CMD_PARSING_ERR);
         return true;
     }
 
@@ -126,43 +126,43 @@ bool parse(struct Window *window, struct Tab *tab, const char *str) {
         return false;
     }
 
-    execute_cmd(window, tab, &cmd);
+    execute_cmd(s, &cmd);
     free(cmd.args);
     return true;
 }
 
-void execute_cmd(struct Window *window, struct Tab *tab, struct Command *cmd) {
+void execute_cmd(struct State *s, struct Command *cmd) {
     if (strcmp(cmd->cmd, CMD_EDIT) == 0) {
         char arg[256];
         if (get_arg(cmd, 0, arg) == false) {
-            cmd_error(window, CMD_MISSING_ARG);
+            cmd_error(s, CMD_MISSING_ARG);
             return;
         }
-        edit(tab, arg);
+        edit(s, arg);
     } else if (strcmp(cmd->cmd, CMD_SAVE) == 0) {
         char arg[256];
         if (get_arg(cmd, 0, arg) == false) {
-            cmd_error(window, CMD_MISSING_ARG);
+            cmd_error(s, CMD_MISSING_ARG);
             return;
         }
-        save(tab, arg);
+        save(s, arg);
     } else if (strcmp(cmd->cmd, CMD_TITLE) == 0) {
         char arg[256];
         if (get_arg(cmd, 0, arg) == false) {
-            cmd_error(window, CMD_MISSING_ARG);
+            cmd_error(s, CMD_MISSING_ARG);
             return;
         }
-        title(tab, arg);
+        title(s, arg);
     } else if (strcmp(cmd->cmd, CMD_AUTHOR) == 0) {
         char arg[256];
         if (get_arg(cmd, 0, arg) == false) {
-            cmd_error(window, CMD_MISSING_ARG);
+            cmd_error(s, CMD_MISSING_ARG);
             return;
         }
-        author(tab, arg);
+        author(s, arg);
     }
     // If no error, clear the status bar
-    draw_status_window_clear(window);
+    draw_status_window_clear(s->window);
 }
 
 bool get_arg(struct Command *cmd, int n, char *buffer) {
@@ -172,42 +172,42 @@ bool get_arg(struct Command *cmd, int n, char *buffer) {
     return true;
 }
 
-void cmd_error(struct Window *window, int code) {
+void cmd_error(struct State *s, int code) {
     switch (code) {
         case CMD_MISSING_ARG:
-            draw_status_window_msg(window, CMD_MISSING_ARG_MSG);
+            draw_status_window_msg(s->window, CMD_MISSING_ARG_MSG);
             break;
         case CMD_PARSING_ERR:
-            draw_status_window_msg(window, CMD_PARSING_ERR_MSG);
+            draw_status_window_msg(s->window, CMD_PARSING_ERR_MSG);
             break;
     }
 }
 
 
 
-void edit(struct Tab *tab, char *file) {
-    open_tab(tab, file);
+void edit(struct State *s, char *file) {
+    open_tab(s->tab, file);
 }
 
-void save(struct Tab *tab, char *file) {
-    save_tab(tab, file);
+void save(struct State *s, char *file) {
+    save_tab(s->tab, file);
 }
 
-void title(struct Tab *tab, char *title) {
-    char *new_title = realloc(tab->info.title, strlen(title) + 1);
+void title(struct State *s, char *title) {
+    char *new_title = realloc(s->tab->info.title, strlen(title) + 1);
     if (new_title != NULL) {
-        tab->info.title = new_title;
-        strcpy(tab->info.title, title);
+        s->tab->info.title = new_title;
+        strcpy(s->tab->info.title, title);
     } else {
         // ERROR
     }
 }
 
-void author(struct Tab *tab, char *author) {
-    char *new_author = realloc(tab->info.band, strlen(author) + 1);
+void author(struct State *s, char *author) {
+    char *new_author = realloc(s->tab->info.band, strlen(author) + 1);
     if (new_author != NULL) {
-        tab->info.band = new_author;
-        strcpy(tab->info.band, author);
+        s->tab->info.band = new_author;
+        strcpy(s->tab->info.band, author);
     } else {
         // ERROR
     }

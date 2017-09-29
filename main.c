@@ -4,27 +4,27 @@
 #include <ncurses.h>
 
 // Processes character input (return false to exit, true to continue)
-bool input(char c, struct Window *window, struct Tab *tab);
+bool input(char c, struct State *s);
 
 int main(int argc, char **argv) {
-    struct Window *w = init_window();
+    struct Tab t = {{"", "", STANDARD_TUNING}, NULL};
+    struct State s = {init_window(), &t, Normal};
     noecho();
     keypad(stdscr, TRUE);
     curs_set(0);
-    struct Tab t = {{"", "", STANDARD_TUNING}, NULL};
 
     do {
-        draw_with_tab(w, &t);
-    } while (input(cmd_getch(w), w, &t));
-    kill_window(w);
+        draw_with_tab(s.window, &t);
+    } while (input(cmd_getch(s.window), &s));
+    kill_window(s.window);
     return 0;
 }
 
-bool input(char c, struct Window *window, struct Tab *tab) {
+bool input(char c, struct State *s) {
     switch (c) {
     case ':':
         // Prompt for a command (triggered by ':')
-        return prompt(window, tab);
+        return prompt(s);
     default:
         return true;
     }
