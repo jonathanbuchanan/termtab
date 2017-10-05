@@ -39,8 +39,8 @@ void title(struct State *s, char *title);
 #define CMD_AUTHOR "author"
 void author(struct State *s, char *author);
 
-// Begins editing the tuning
-#define CMD_EDIT_TUNING "edit_tuning"
-void edit_tuning();
+// Sets the tone of a string
+#define CMD_SET_STRING "set_string"
+void set_string(struct State *s, int string, char *tone);
 
 #endif

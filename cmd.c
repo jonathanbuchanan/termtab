@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <errno.h>
 
 #include "tab.h"
 
@@ -10,6 +11,26 @@ struct Command {
     char **args;
     int n_args;
 };
+
+// Executes a command
+void execute_cmd(struct State *s, struct Command *cmd);
+
+// If an argument at the index is found, it is copied into the buffer and true is returned
+bool get_arg(struct Command *cmd, int n, char *buff);
+
+// If an argument at the index is found, it is copied into the buffer as an int and true is returned
+bool get_arg_int(struct Command *cmd, int n, int *buff);
+
+// Raises an error
+void cmd_error(struct State *s, int code);
+
+#define CMD_MISSING_ARG 1
+#define CMD_MISSING_ARG_MSG "The command is missing an argument."
+
+#define CMD_PARSING_ERR 2
+#define CMD_PARSING_ERR_MSG "The command could not be parsed. Check command syntax."
+
+
 
 void init_and_cpy_range(char **buffer, const char *start, const char *end) {
     *buffer = malloc(end - start + 1);
@@ -78,23 +99,6 @@ bool tokenize(const char *string, struct Command *command) {
     return true;
 }
 
-// Executes a command
-void execute_cmd(struct State *s, struct Command *cmd);
-
-// If an argument at the index is found, it is copied into the buffer and true is returned
-bool get_arg(struct Command *cmd, int n, char *buff);
-
-// Raises an error
-void cmd_error(struct State *s, int code);
-
-#define CMD_MISSING_ARG 1
-#define CMD_MISSING_ARG_MSG "The command is missing an argument."
-
-#define CMD_PARSING_ERR 2
-#define CMD_PARSING_ERR_MSG "The command could not be parsed. Check command syntax."
-
-
-
 bool prompt(struct State *s) {
     // Prompt the user for a command
     char buffer[256];
@@ -160,6 +164,18 @@ void execute_cmd(struct State *s, struct Command *cmd) {
             return;
         }
         author(s, arg);
+    } else if (strcmp(cmd->cmd, CMD_SET_STRING) == 0) {
+        int string;
+        char arg[256];
+        if (get_arg_int(cmd, 0, &string) == false) {
+            cmd_error(s, CMD_MISSING_ARG);
+            return;
+        }
+        if (get_arg(cmd, 1, arg) == false) {
+            cmd_error(s, CMD_MISSING_ARG);
+            return;
+        }
+        set_string(s, string, arg);
     }
     // If no error, clear the status bar
     draw_status_window_clear(s->window);
@@ -169,6 +185,17 @@ bool get_arg(struct Command *cmd, int n, char *buffer) {
     if (n + 1 > cmd->n_args)
         return false;
     strcpy(buffer, cmd->args[n]);
+    return true;
+}
+
+bool get_arg_int(struct Command *cmd, int n, int *buffer) {
+    if (n + 1 > cmd->n_args)
+        return false;
+    long result = strtol(cmd->args[n], NULL, 10);
+    if (errno == ERANGE || errno == EINVAL) {
+        return false;
+    }
+    *buffer = (int)result;
     return true;
 }
 
@@ -209,6 +236,15 @@ void author(struct State *s, char *author) {
         s->tab->info.band = new_author;
         strcpy(s->tab->info.band, author);
     } else {
+        // ERROR
+    }
+}
+
+void set_string(struct State *s, int string, char *tone) {
+    struct Tone t = string_to_tone(tone);
+    if (string < 6)
+        s->tab->info.tuning.strings[string] = t;
+    else {
         // ERROR
     }
 }

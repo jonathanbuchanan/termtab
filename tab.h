@@ -30,6 +30,9 @@ struct Tone {
 // Returns a string for any given tone
 void tone_to_string(struct Tone tone, char *buffer, size_t n);
 
+// Returns a tone for a string
+struct Tone string_to_tone(const char *str);
+
 struct Tuning {
     struct Tone strings[6];
 };

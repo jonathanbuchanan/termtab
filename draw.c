@@ -115,11 +115,12 @@ void draw_tab_window(struct Window *window, struct Tab *tab) {
         int y = 7 + (2 * i);
         char buff[5];
         tone_to_string(tab->info.tuning.strings[i], buff, 5);
-        mvwprintw(window->tab, y, 0, buff);
-        mvwhline(window->tab, y, 6, '-', width);
+        mvwprintw(window->tab, y, 0, "%d", i);
+        mvwprintw(window->tab, y, 2, buff);
+        mvwhline(window->tab, y, 8, '-', width);
     }
     // Draw seperating line
-    mvwvline(window->tab, 7, 5, '|', 11);
+    mvwvline(window->tab, 7, 7, '|', 11);
 
     mvwhline(window->tab, TAB_WINDOW_HEIGHT - 1, 0, '_', width);
     wrefresh(window->tab);

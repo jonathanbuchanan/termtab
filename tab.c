@@ -2,7 +2,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <ncurses.h>
+#include <ctype.h>
+#include <errno.h>
 
 void tone_to_string(struct Tone tone, char *buffer, size_t n) {
     char *note;
@@ -26,6 +27,58 @@ void tone_to_string(struct Tone tone, char *buffer, size_t n) {
     }
 
     snprintf(buffer, n, "%s%s%d", note, shift, tone.octave);
+}
+
+struct Tone string_to_tone(const char *str) {
+    struct Tone t;
+    const char *i = str;
+
+    // Note
+    char note = *str;
+    switch (note) {
+        case 'a': t.note = A; break;
+        case 'A': t.note = A; break;
+        case 'b': t.note = B; break;
+        case 'B': t.note = B; break;
+        case 'c': t.note = C; break;
+        case 'C': t.note = C; break;
+        case 'd': t.note = D; break;
+        case 'D': t.note = D; break;
+        case 'e': t.note = E; break;
+        case 'E': t.note = E; break;
+        case 'f': t.note = F; break;
+        case 'F': t.note = F; break;
+        case 'g': t.note = G; break;
+        case 'G': t.note = G; break;
+    }
+    ++i;
+
+    // Shift
+    if (!isdigit(*i)) {
+        if (strncmp(i, "bb", 2) == 0) {
+            t.shift = DoubleFlat;
+            i += 2;
+        } else if (strncmp(i, "b", 1) == 0) {
+            t.shift = Flat;
+            ++i;
+        } else if (strncmp(i, "#", 1) == 0) {
+            t.shift = Sharp;
+            ++i;
+        } else if (strncmp(i, "##", 2) == 0) {
+            t.shift = DoubleSharp;
+            i += 2;
+        }
+    } else {
+        t.shift = Natural;
+    }
+
+    // Octave
+    t.octave = strtol(i, NULL, 10);
+    if (errno == ERANGE || errno == EINVAL) {
+        // Uh oh
+    }
+
+    return t;
 }
 
 void open_tab(struct Tab *t, const char *file) {
