@@ -17,7 +17,8 @@ void draw(struct State *);
 void draw_status(struct State *);
 void draw_cmd(struct State *);
 void draw_cmd_prompt(struct State *, char *buffer);
-void draw_tab(struct Window *, struct Tab *);
+void draw_tab(struct State *);
+void position_cursor(struct State *);
 
 int next_char(struct Window *);
 

@@ -71,9 +71,11 @@ void init_cmd_window(struct Window *window) {
 
 
 void draw(struct State *state) {
-    draw_tab(state->window, state->tab);
     draw_status(state);
     draw_cmd(state);
+    draw_tab(state);
+
+    position_cursor(state);
 }
 
 void begin_input() {
@@ -121,8 +123,9 @@ void draw_cmd_prompt(struct State *state, char *buffer) {
     end_input();
 }
 
-void draw_tab(struct Window *window, struct Tab *tab) {
-    wclear(window->tab);
+void draw_tab(struct State *state) {
+    struct Window *window = state->window;
+    struct Tab *tab = state->tab;
 
     int height, width;
     getmaxyx(window->term, height, width);
@@ -139,10 +142,24 @@ void draw_tab(struct Window *window, struct Tab *tab) {
         mvwprintw(window->tab, y, 2, buff);
         mvwhline(window->tab, y, 8, '-', width);
     }
+
     // Draw seperating line
     mvwvline(window->tab, 7, 7, '|', 11);
 
     mvwhline(window->tab, TAB_WINDOW_HEIGHT - 1, 0, '_', width);
+    wrefresh(window->tab);
+}
+
+void position_cursor(struct State *state) {
+    struct Window *window = state->window;
+
+    if (state->mode == Command)
+        curs_set(0);
+    else if (state->mode == Edit)
+        curs_set(1);
+    // Move cursor
+    wmove(window->tab, 7 + (2 * state->edit.string), 8);
+
     wrefresh(window->tab);
 }
 

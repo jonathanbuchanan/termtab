@@ -2,6 +2,7 @@
 #define CMD_H
 
 #include "tab.h"
+#include "edit.h"
 
 #include <ncurses.h>
 
@@ -15,6 +16,7 @@ enum Mode {
 struct State {
     struct Window *window;
     struct Tab *tab;
+    struct EditingState edit;
     char *msg;
     enum Mode mode;
 };

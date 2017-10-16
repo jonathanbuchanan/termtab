@@ -6,7 +6,7 @@
 
 int main(int argc, char **argv) {
     struct Tab t = {{NULL, NULL, STANDARD_TUNING}, NULL};
-    struct State s = {init_window(), &t, "", Command};
+    struct State s = {init_window(), &t, {0, 0}, "", Command};
     noecho();
     keypad(stdscr, TRUE);
     curs_set(0);

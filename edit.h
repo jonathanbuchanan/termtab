@@ -1,11 +1,15 @@
 #ifndef EDIT_H
 #define EDIT_H
 
-#include "cmd.h"
+#include <ncurses.h>
 
-struct EditState {
-
+struct State;
+struct EditingState {
+    int string;
+    int x;
 };
+
+
 
 bool edit_input(struct State *s, int c);
 
