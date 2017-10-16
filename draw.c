@@ -1,6 +1,7 @@
 #include "draw.h"
 #include "tab.h"
 #include <stdlib.h>
+#include <string.h>
 
 struct Window {
     WINDOW *term;
@@ -25,7 +26,6 @@ struct Window * init_window() {
     init_tab_window(w);
     init_status_window(w);
     init_cmd_window(w);
-    draw(w);
     return w;
 }
 
@@ -70,16 +70,10 @@ void init_cmd_window(struct Window *window) {
 
 
 
-void draw(struct Window *window) {
-    draw_tab_window_blank(window);
-    draw_status_window_blank(window);
-    draw_cmd_window_blank(window);
-}
-
-void draw_with_tab(struct Window *window, struct Tab *tab) {
-    draw_tab_window(window, tab);
-    draw_status_window_blank(window);
-    draw_cmd_window_blank(window);
+void draw(struct State *state) {
+    draw_tab(state->window, state->tab);
+    draw_status(state);
+    draw_cmd(state);
 }
 
 void begin_input() {
@@ -94,14 +88,40 @@ void end_input() {
 
 
 
-void draw_tab_window_blank(struct Window *window) {
-    int y, x;
-    getmaxyx(window->tab, y, x);
-    mvwhline(window->tab, TAB_WINDOW_HEIGHT - 1, 0, '_', x);
-    wrefresh(window->tab);
+void draw_status(struct State *state) {
+    int x, y;
+    getmaxyx(state->window->status, y, x);
+
+    werase(state->window->status);
+    mvwprintw(state->window->status, 0, 0, state->msg);
+    const char *mode;
+    switch (state->mode) {
+    case Command:
+        mode = "COMMAND";
+        break;
+    case Edit:
+        mode = "EDIT";
+        break;
+    }
+    mvwprintw(state->window->status, 0, x - strlen(mode), mode);
+    wrefresh(state->window->status);
 }
 
-void draw_tab_window(struct Window *window, struct Tab *tab) {
+void draw_cmd(struct State *state) {
+    werase(state->window->cmd);
+    wrefresh(state->window->cmd);
+}
+
+void draw_cmd_prompt(struct State *state, char *buffer) {
+    werase(state->window->cmd);
+    mvwaddch(state->window->cmd, 0, 0, ':');
+    wrefresh(state->window->cmd);
+    begin_input();
+    mvwgetstr(state->window->cmd, 0, 1, buffer);
+    end_input();
+}
+
+void draw_tab(struct Window *window, struct Tab *tab) {
     wclear(window->tab);
 
     int height, width;
@@ -126,36 +146,8 @@ void draw_tab_window(struct Window *window, struct Tab *tab) {
     wrefresh(window->tab);
 }
 
-void draw_status_window_clear(struct Window *window) {
-    werase(window->status);
-    wrefresh(window->status);
-}
-
-void draw_status_window_blank(struct Window *window) {
-    wrefresh(window->status);
-}
-
-void draw_status_window_msg(struct Window *window, const char *msg) {
-    werase(window->status);
-    mvwprintw(window->status, 0, 0, msg);
-    wrefresh(window->status);
-}
-
-void draw_cmd_window_blank(struct Window *window) {
-    werase(window->cmd);
-    wrefresh(window->cmd);
-}
-
-void draw_cmd_window_prompt(struct Window *window, char *buffer) {
-    begin_input();
-    mvwaddch(window->cmd, 0, 0, ':');
-    wrefresh(window->cmd);
-    mvwgetstr(window->cmd, 0, 1, buffer);
-    end_input();
-}
 
 
-
-int cmd_getch(struct Window *window) {
+int next_char(struct Window *window) {
     return wgetch(window->cmd);
 }

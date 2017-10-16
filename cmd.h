@@ -1,20 +1,26 @@
 #ifndef CMD_H
 #define CMD_H
 
-#include "draw.h"
 #include "tab.h"
 
+#include <ncurses.h>
+
+struct Window;
+
 enum Mode {
-    Normal,
-    EditTuning
+    Command,
+    Edit
 };
 
 struct State {
     struct Window *window;
     struct Tab *tab;
+    char *msg;
     enum Mode mode;
 };
 
+// Handles user input
+bool cmd_input(struct State *s, char c);
 // Prompts the user to enter a command
 bool prompt(struct State *s);
 // Parses a command and executes the corresponding function
@@ -26,6 +32,10 @@ bool parse(struct State *s, const char *cmd);
 // Opens a file for editing
 #define CMD_EDIT "edit"
 void edit(struct State *s, char *file);
+
+// Enters edit mode
+#define CMD_EDIT_MODE "edit_mode"
+void edit_mode(struct State *s);
 
 // Saves a file (file is optional if already known in Tab struct)
 #define CMD_SAVE "save"

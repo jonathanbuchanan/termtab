@@ -3,6 +3,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
+#include "draw.h"
 
 #include "tab.h"
 
@@ -99,15 +100,29 @@ bool tokenize(const char *string, struct Command *command) {
     return true;
 }
 
+bool cmd_input(struct State *s, char c) {
+    switch (c) {
+    case ':':
+        return prompt(s);
+        break;
+    case 'e':
+        // Shortcut to edit mode
+        edit_mode(s);
+        return true;
+        break;
+    default:
+        return true;
+        break;
+    }
+}
+
 bool prompt(struct State *s) {
     // Prompt the user for a command
     char buffer[256];
-    draw_cmd_window_prompt(s->window, buffer);
+    draw_cmd_prompt(s, buffer);
 
     // Parse the entered command
     bool close = parse(s, buffer);
-    
-    draw_cmd_window_blank(s->window);
 
     return close;
 }
@@ -143,6 +158,9 @@ void execute_cmd(struct State *s, struct Command *cmd) {
             return;
         }
         edit(s, arg);
+    } else if (strcmp(cmd->cmd, CMD_EDIT_MODE) == 0) {
+        char arg[256];
+        edit_mode(s);
     } else if (strcmp(cmd->cmd, CMD_SAVE) == 0) {
         char arg[256];
         if (get_arg(cmd, 0, arg) == false) {
@@ -177,8 +195,6 @@ void execute_cmd(struct State *s, struct Command *cmd) {
         }
         set_string(s, string, arg);
     }
-    // If no error, clear the status bar
-    draw_status_window_clear(s->window);
 }
 
 bool get_arg(struct Command *cmd, int n, char *buffer) {
@@ -202,10 +218,10 @@ bool get_arg_int(struct Command *cmd, int n, int *buffer) {
 void cmd_error(struct State *s, int code) {
     switch (code) {
         case CMD_MISSING_ARG:
-            draw_status_window_msg(s->window, CMD_MISSING_ARG_MSG);
+            s->msg = CMD_MISSING_ARG_MSG;
             break;
         case CMD_PARSING_ERR:
-            draw_status_window_msg(s->window, CMD_PARSING_ERR_MSG);
+            s->msg = CMD_PARSING_ERR_MSG;
             break;
     }
 }
@@ -214,6 +230,10 @@ void cmd_error(struct State *s, int code) {
 
 void edit(struct State *s, char *file) {
     open_tab(s->tab, file);
+}
+
+void edit_mode(struct State *s) {
+    s->mode = Edit;
 }
 
 void save(struct State *s, char *file) {
