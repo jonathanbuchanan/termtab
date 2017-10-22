@@ -81,6 +81,23 @@ struct Tone string_to_tone(const char *str) {
     return t;
 }
 
+struct Measure * new_measure(struct Tab *tab, int ts_top, int ts_bottom) {
+    if (tab->measures_n == tab->measures_size) {
+        tab->measures = realloc(tab->measures, sizeof(struct Measure) * tab->measures_size * 2);
+        tab->measures_size *= 2;
+    }
+    struct Measure *m = &tab->measures[tab->measures_n];
+    ++tab->measures_n;
+    *m = (struct Measure){ts_top, ts_bottom, NULL, 0};
+    return m;
+}
+
+struct Tab new_tab(struct Tuning tuning) {
+    struct Tab t = {{"", "", tuning}, "", malloc(sizeof(struct Measure)), 0, 1};
+    t.measures = new_measure(&t, 4, 4);
+    return t;
+}
+
 void open_tab(struct Tab *t, const char *file) {
     FILE *f = fopen(file, "rb");
 
@@ -169,6 +186,19 @@ void open_tab(struct Tab *t, const char *file) {
 /// Octave (uint8)
 /// 6 times
 
+/// Tab
+// 0x00 0x10
+// Measure
+/// 0xAA 0xAA
+/// Time Signature - Top (int)
+/// Time Signature - Bottom (int)
+/// # of notes (int)
+// Note
+/// 0xBB 0xBB
+/// String (int)
+/// Fret (int)
+/// Length (int)
+
 /// End of file
 // 0xFF 0xFF
 
@@ -207,6 +237,26 @@ void save_tab(const struct Tab *tab, const char *file) {
         fwrite(&tone.shift, sizeof(int), 1, f);
         // Octave
         fwrite(&tone.octave, sizeof(int), 1, f);
+    }
+
+    const char tab_code[] = {0x00, 0x10};
+    fwrite(tab_code, sizeof(char), 2, f);
+    const char measure_code[] = {0xAA, 0xAA};
+    const char note_code[] = {0xBB, 0xBB};
+    for (int i = 0; i < tab->measures_n; ++i) {
+        struct Measure *m = &tab->measures[i];
+        fwrite(measure_code, sizeof(char), 2, f);
+
+        fwrite(&m->ts_top, sizeof(int), 1, f);
+        fwrite(&m->ts_bottom, sizeof(int), 1, f);
+        fwrite(&m->notes_n, sizeof(size_t), 1, f);
+        for (int i = 0; i < m->notes_n; ++i) {
+            fwrite(note_code, sizeof(char), 2, f);
+
+            fwrite(&m->notes[i].string, sizeof(int), 1, f);
+            fwrite(&m->notes[i].fret, sizeof(int), 1, f);
+            fwrite(&m->notes[i].length, sizeof(int), 1, f);
+        }
     }
 
 

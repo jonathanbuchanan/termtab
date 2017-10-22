@@ -146,6 +146,12 @@ void draw_tab(struct State *state) {
     // Draw seperating line
     mvwvline(window->tab, 7, 7, '|', 11);
 
+    // Draw barlines
+    for (int i = 0; i < state->tab->measures_n; ++i) {
+        int x = 7 + (9 * (i + 1));
+        mvwvline(window->tab, 7, x, '|', 11);
+    }
+
     mvwhline(window->tab, TAB_WINDOW_HEIGHT - 1, 0, '_', width);
     wrefresh(window->tab);
 }

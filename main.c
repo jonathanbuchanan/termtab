@@ -5,7 +5,7 @@
 #include <ncurses.h>
 
 int main(int argc, char **argv) {
-    struct Tab t = {{NULL, NULL, STANDARD_TUNING}, NULL};
+    struct Tab t = new_tab(STANDARD_TUNING);
     struct State s = {init_window(), &t, {0, 0}, "", Command};
     noecho();
     keypad(stdscr, TRUE);

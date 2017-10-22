@@ -20,6 +20,9 @@ bool edit_input(struct State *s, int c) {
     case 'l':
 
         break;
+    case 'a':
+        new_measure(s->tab, 4, 4);
+        break;
     default:
         break;
     }
