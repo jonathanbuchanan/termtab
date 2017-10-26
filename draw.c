@@ -147,24 +147,42 @@ void draw_tab(struct State *state) {
     mvwvline(window->tab, 7, 7, '|', 11);
 
     // Draw barlines
+    int x = 8;
     for (int i = 0; i < state->tab->measures_n; ++i) {
-        int x = 7 + (9 * (i + 1));
-        mvwvline(window->tab, 7, x, '|', 11);
+        x += draw_measure(window, x, 7, state->tab, &state->tab->measures[i]);
     }
 
     mvwhline(window->tab, TAB_WINDOW_HEIGHT - 1, 0, '_', width);
     wrefresh(window->tab);
 }
 
-void position_cursor(struct State *state) {
-    struct Window *window = state->window;
+#define TICKS_PER_COLUMN 2
+int draw_measure(struct Window *w, int x, int y, struct Tab *t, struct Measure *m) {
+    int width = (m->ts_top * t->ticks_per_quarter * 4) / (m->ts_bottom * TICKS_PER_COLUMN);
+    mvwvline(w->tab, y, x + width, '|', 11);
+    return width + 1;
+}
 
-    if (state->mode == Command)
-        curs_set(0);
-    else if (state->mode == Edit)
-        curs_set(1);
-    // Move cursor
-    wmove(window->tab, 7 + (2 * state->edit.string), 8);
+void position_cursor(struct State *state) {
+    if (state->mode != Edit)
+        return;
+    init_pair(2, COLOR_WHITE, COLOR_WHITE);
+    struct Window *window = state->window;
+    int w = state->edit.cursor_width / TICKS_PER_COLUMN;
+
+    // Offset from measures
+    int offset_m = 0;
+    for (int i = 0; i < state->edit.measure; ++i)
+        offset_m += (measure_get_ticks(state->tab, i) / TICKS_PER_COLUMN) + 1;
+
+    // Offset within measure
+    int offset_x = state->edit.x / TICKS_PER_COLUMN;
+
+    wmove(window->tab, 7 + (2 * state->edit.string), 8 + offset_m + offset_x/*8 + ((state->edit.x + (9 * state->edit.measure)) / 2)*/);
+    wattron(window->tab, COLOR_PAIR(2));
+    for (int i = 0; i < w; ++i)
+        waddch(window->tab, ' ');
+    wattroff(window->tab, COLOR_PAIR(2));
 
     wrefresh(window->tab);
 }

@@ -62,10 +62,14 @@ struct Tab {
     struct Measure *measures;
     size_t measures_n;
     size_t measures_size;
+    int ticks_per_quarter;
 };
 
 // Creates a blank measure with no notes, doubling the array if necessary
 struct Measure * new_measure(struct Tab *tab, int ts_top, int ts_bottom);
+
+// Returns the number of ticks in a measure
+int measure_get_ticks(struct Tab *tab, int measure);
 
 // Creates a blank tab with one measure
 struct Tab new_tab(struct Tuning t);

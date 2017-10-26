@@ -92,8 +92,12 @@ struct Measure * new_measure(struct Tab *tab, int ts_top, int ts_bottom) {
     return m;
 }
 
+int measure_get_ticks(struct Tab *t, int m) {
+    return (t->measures[m].ts_top * t->ticks_per_quarter * 4) / t->measures[m].ts_bottom;
+}
+
 struct Tab new_tab(struct Tuning tuning) {
-    struct Tab t = {{"", "", tuning}, "", malloc(sizeof(struct Measure)), 0, 1};
+    struct Tab t = {{"", "", tuning}, "", malloc(sizeof(struct Measure)), 0, 1, 24};
     t.measures = new_measure(&t, 4, 4);
     return t;
 }

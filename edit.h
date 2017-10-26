@@ -6,9 +6,11 @@
 
 struct State;
 struct EditingState {
+    // The cursor defines a selection of a certain width. All measurements in terms of ticks
     int string;
-    struct Measure *measure;
+    int measure;
     int x;
+    int cursor_width;
 };
 
 
