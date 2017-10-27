@@ -156,10 +156,25 @@ void draw_tab(struct State *state) {
     wrefresh(window->tab);
 }
 
+void draw_tab_note_prompt(struct State *state, char *buffer) {
+    mvwprintw(state->window->tab, 5, 0, "Enter a note: ");
+    wrefresh(state->window->tab);
+    begin_input();
+    mvwgetstr(state->window->tab, 5, 14, buffer);
+    end_input();
+    wmove(state->window->tab, 5, 0);
+    wclrtoeol(state->window->tab);
+    wrefresh(state->window->tab);
+}
+
 #define TICKS_PER_COLUMN 2
 int draw_measure(struct Window *w, int x, int y, struct Tab *t, struct Measure *m) {
     int width = (m->ts_top * t->ticks_per_quarter * 4) / (m->ts_bottom * TICKS_PER_COLUMN);
     mvwvline(w->tab, y, x + width, '|', 11);
+    for (int i = 0; i < m->notes_n; ++i) {
+        struct Note *n = &m->notes[i];
+        mvwprintw(w->tab, 7 + (2 * n->string), x + n->offset, "%d", n->fret);
+    }
     return width + 1;
 }
 

@@ -1,5 +1,6 @@
 #include "edit.h"
 #include "cmd.h"
+#include "draw.h"
 
 bool edit_input(struct State *s, int c) {
     switch (c) {
@@ -35,12 +36,25 @@ bool edit_input(struct State *s, int c) {
         break;
     // Increase cursor size
     case 'g':
+        s->edit.cursor_width = s->edit.cursor_width * 2;
         break;
     // Decrease cursor size
     case 'f':
+        if (s->edit.cursor_width > 1)
+            s->edit.cursor_width = s->edit.cursor_width / 2;
+        break;
+    case 'w':
+        add_note(s);
         break;
     default:
         break;
     }
     return true;
+}
+
+void add_note(struct State *s) {
+    char buff[256];
+    draw_tab_note_prompt(s, buff);
+    struct Note n = string_to_note(buff, s->edit.string, s->edit.x, s->edit.cursor_width);
+    measure_new_note(s->tab, s->edit.measure, n);
 }

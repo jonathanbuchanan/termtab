@@ -17,4 +17,6 @@ struct EditingState {
 
 bool edit_input(struct State *s, int c);
 
+void add_note(struct State *s);
+
 #endif

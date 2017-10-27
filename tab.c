@@ -81,6 +81,17 @@ struct Tone string_to_tone(const char *str) {
     return t;
 }
 
+struct Note string_to_note(const char *str, int string_number, int offset, int length) {
+    struct Note n;
+
+    n.fret = strtol(str, NULL, 10);
+    n.string = string_number;
+    n.offset = offset;
+    n.length = length;
+
+    return n;
+}
+
 struct Measure * new_measure(struct Tab *tab, int ts_top, int ts_bottom) {
     if (tab->measures_n == tab->measures_size) {
         tab->measures = realloc(tab->measures, sizeof(struct Measure) * tab->measures_size * 2);
@@ -88,7 +99,7 @@ struct Measure * new_measure(struct Tab *tab, int ts_top, int ts_bottom) {
     }
     struct Measure *m = &tab->measures[tab->measures_n];
     ++tab->measures_n;
-    *m = (struct Measure){ts_top, ts_bottom, NULL, 0};
+    *m = (struct Measure){ts_top, ts_bottom, malloc(sizeof(struct Note)), 0, 1};
     return m;
 }
 
@@ -96,8 +107,19 @@ int measure_get_ticks(struct Tab *t, int m) {
     return (t->measures[m].ts_top * t->ticks_per_quarter * 4) / t->measures[m].ts_bottom;
 }
 
-struct Tab new_tab(struct Tuning tuning) {
-    struct Tab t = {{"", "", tuning}, "", malloc(sizeof(struct Measure)), 0, 1, 24};
+struct Note * measure_new_note(struct Tab *t, int _m, struct Note n) {
+    struct Measure *m = &t->measures[_m];
+    if (m->notes_n == m->notes_size) {
+        m->notes = realloc(m->notes, sizeof(struct Note) * m->notes_size * 2);
+        m->notes_size *= 2;
+    }
+    m->notes[m->notes_n] = n;
+    ++m->notes_n;
+    return &m->notes[m->notes_n];
+}
+
+struct Tab new_tab(struct Tuning tuning, int tickrate) {
+    struct Tab t = {{"", "", tuning}, "", malloc(sizeof(struct Measure)), 0, 1, tickrate};
     t.measures = new_measure(&t, 4, 4);
     return t;
 }
