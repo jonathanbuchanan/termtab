@@ -149,6 +149,47 @@ struct Tab new_tab(struct Tuning tuning, int tickrate) {
     return t;
 }
 
+/// File Formatting ---
+/// Magic Number (spells out 'TABS')
+// 0x54 0x41 0x42 0x53
+
+/// Version code
+// 0x00 0x00
+// (4 byte version code)
+
+/// Title
+// 0x00 0x01
+// length (int)
+// (c string)
+
+/// Author
+// 0x00 0x02
+// length (int)
+// (c string)
+
+/// Tuning
+// 0x00 0x03
+/// Note (1 byte: 0x00 - 0x06 = A - G)
+/// Shift (1-byte: 0x00 - 0x04 = double flat - double sharp)
+/// Octave (uint8)
+/// 6 times
+
+/// Tab
+// 0x00 0x10
+/// # of measures (int)
+// Measure
+/// Time Signature - Top (int)
+/// Time Signature - Bottom (int)
+/// # of notes (int)
+// Note
+/// String (int)
+/// Fret (int)
+/// Length (int)
+
+/// End of file
+// 0xFF 0xFF
+
+#define BLOCK_EQUAL(a, b) (a[0] == b[0] && a[1] == b[1])
 void open_tab(struct Tab *t, const char *file) {
     FILE *f = fopen(file, "rb");
 
@@ -179,21 +220,22 @@ void open_tab(struct Tab *t, const char *file) {
         const char title_code[] = {0x00, 0x01};
         const char author_code[] = {0x00, 0x02};
         const char tuning_code[] = {0x00, 0x03};
+        const char tab_code[] = {0x00, 0x10};
         const char end_of_file[] = {0xFF, 0xFF};
 
-        if (block[0] == title_code[0] && block[1] == title_code[1]) {
+        if (BLOCK_EQUAL(block, title_code)) {
             int len;
             fread(&len, sizeof(int), 1, f);
             t->info.title = malloc(sizeof(char) * len);
             fread(t->info.title, sizeof(char), len, f);
-        } else if (block[0] == author_code[0] && block[1] == author_code[1]) {
+        } else if (BLOCK_EQUAL(block, author_code)) {
             int len;
             fread(&len, sizeof(int), 1, f);
             t->info.band = malloc(sizeof(char) * len);
             fread(t->info.band, sizeof(char), len, f);
-        } else if (block[0] == end_of_file[0] && block[1] == end_of_file[1]) {
+        } else if (BLOCK_EQUAL(block, end_of_file)) {
             break;
-        } else if (block[0] == tuning_code[0] && block[1] == tuning_code[1]) {
+        } else if (BLOCK_EQUAL(block, tuning_code)) {
             for (int i = 0; i < 6; ++i) {
                 struct Tone *tone = &t->info.tuning.strings[i];
                 int note;
@@ -206,52 +248,41 @@ void open_tab(struct Tab *t, const char *file) {
                 tone->shift = shift;
                 tone->octave = octave;
             }
+        } else if (BLOCK_EQUAL(block, tab_code)) {
+            const char measure_code[] = {0xAA, 0xAA};
+            const char note_code[] = {0xBB, 0xBB};
+            fread(&t->ticks_per_quarter, sizeof(int), 1, f);
+
+            int measures_n;
+            fread(&measures_n, sizeof(size_t), 1, f);
+            // Allocate room for measures
+            t->measures = malloc(sizeof(struct Measure) * measures_n);
+            t->measures_n = measures_n;
+            t->measures_size = measures_n;
+            for (int i = 0; i < t->measures_n; ++i) {
+                struct Measure *m = &t->measures[i];                
+                fread(&m->ts_top, sizeof(int), 1, f);
+                fread(&m->ts_bottom, sizeof(int), 1, f);
+
+                int notes_n;
+                fread(&notes_n, sizeof(size_t), 1, f);
+
+                m->notes = malloc(sizeof(struct Note) * notes_n);
+                m->notes_n = notes_n;
+                m->notes_size = notes_n;
+                for (int j = 0; j < m->notes_n; ++j) {
+                    struct Note *n = &m->notes[j];
+                    fread(&n->string, sizeof(int), 1, f);
+                    fread(&n->fret, sizeof(int), 1, f);
+                    fread(&n->offset, sizeof(int), 1, f);
+                    fread(&n->length, sizeof(int), 1, f);
+                }
+            }
         }
     }
 
     fclose(f);
 }
-
-/// File Formatting ---
-/// Magic Number (spells out 'TABS')
-// 0x54 0x41 0x42 0x53
-
-/// Version code
-// 0x00 0x00
-// (4 byte version code)
-
-/// Title
-// 0x00 0x01
-// length (int)
-// (c string)
-
-/// Author
-// 0x00 0x02
-// length (int)
-// (c string)
-
-/// Tuning
-// 0x00 0x03
-/// Note (1 byte: 0x00 - 0x06 = A - G)
-/// Shift (1-byte: 0x00 - 0x04 = double flat - double sharp)
-/// Octave (uint8)
-/// 6 times
-
-/// Tab
-// 0x00 0x10
-// Measure
-/// 0xAA 0xAA
-/// Time Signature - Top (int)
-/// Time Signature - Bottom (int)
-/// # of notes (int)
-// Note
-/// 0xBB 0xBB
-/// String (int)
-/// Fret (int)
-/// Length (int)
-
-/// End of file
-// 0xFF 0xFF
 
 void save_tab(const struct Tab *tab, const char *file) {
     FILE *f = fopen(file, "wb");
@@ -292,20 +323,18 @@ void save_tab(const struct Tab *tab, const char *file) {
 
     const char tab_code[] = {0x00, 0x10};
     fwrite(tab_code, sizeof(char), 2, f);
-    const char measure_code[] = {0xAA, 0xAA};
-    const char note_code[] = {0xBB, 0xBB};
+    fwrite(&tab->ticks_per_quarter, sizeof(int), 1, f);
+    fwrite(&tab->measures_n, sizeof(size_t), 1, f);
     for (int i = 0; i < tab->measures_n; ++i) {
         struct Measure *m = &tab->measures[i];
-        fwrite(measure_code, sizeof(char), 2, f);
 
         fwrite(&m->ts_top, sizeof(int), 1, f);
         fwrite(&m->ts_bottom, sizeof(int), 1, f);
         fwrite(&m->notes_n, sizeof(size_t), 1, f);
         for (int i = 0; i < m->notes_n; ++i) {
-            fwrite(note_code, sizeof(char), 2, f);
-
             fwrite(&m->notes[i].string, sizeof(int), 1, f);
             fwrite(&m->notes[i].fret, sizeof(int), 1, f);
+            fwrite(&m->notes[i].offset, sizeof(int), 1, f);
             fwrite(&m->notes[i].length, sizeof(int), 1, f);
         }
     }
