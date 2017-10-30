@@ -76,8 +76,14 @@ struct Measure * new_measure(struct Tab *tab, int ts_top, int ts_bottom);
 // Returns the number of ticks in a measure
 int measure_get_ticks(struct Tab *tab, int measure);
 
+// Returns a pointer to a note (or NULL if it can't be found) for a given offset and string
+struct Note * measure_get_note(struct Tab *tab, int measure, int string, int offset);
+
 // Adds a note to a measure and returns its pointer
 struct Note * measure_new_note(struct Tab *tab, int measure, struct Note n);
+
+// Removes a note from a measure
+void measure_remove_note(struct Tab *tab, int measure, struct Note *n);
 
 // Creates a blank tab with one measure
 struct Tab new_tab(struct Tuning t, int tick_rate);

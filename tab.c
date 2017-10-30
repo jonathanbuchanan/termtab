@@ -107,15 +107,40 @@ int measure_get_ticks(struct Tab *t, int m) {
     return (t->measures[m].ts_top * t->ticks_per_quarter * 4) / t->measures[m].ts_bottom;
 }
 
+struct Note * measure_get_note(struct Tab *t, int _m, int string, int offset) {
+    struct Measure *m = &t->measures[_m];
+    struct Note *note = NULL;
+    for (int i = 0; i < m->notes_n; ++i) {
+        if (m->notes[i].offset == offset && m->notes[i].string == string)
+            note = &m->notes[i];
+    }
+    return note;
+}
+
 struct Note * measure_new_note(struct Tab *t, int _m, struct Note n) {
     struct Measure *m = &t->measures[_m];
-    if (m->notes_n == m->notes_size) {
-        m->notes = realloc(m->notes, sizeof(struct Note) * m->notes_size * 2);
-        m->notes_size *= 2;
+    struct Note *note = measure_get_note(t, _m, n.string, n.offset);
+    if (note == NULL) {
+        if (m->notes_n == m->notes_size) {
+            m->notes = realloc(m->notes, sizeof(struct Note) * m->notes_size * 2);
+            m->notes_size *= 2;
+        }
+        note = &m->notes[m->notes_n];
+        ++m->notes_n;
     }
-    m->notes[m->notes_n] = n;
-    ++m->notes_n;
-    return &m->notes[m->notes_n];
+    *note = n;
+    return note;
+}
+
+void measure_remove_note(struct Tab *t, int _m, struct Note *n) {
+    struct Measure *m = &t->measures[_m];
+    struct Note *temp_notes = malloc(sizeof(struct Note) * (m->notes_size));
+    int index = n - m->notes;
+    memmove(temp_notes, m->notes, index * sizeof(struct Note));
+    memmove(temp_notes + index, m->notes + index + 1, (m->notes_n - index) * sizeof(struct Note));
+    free(m->notes);
+    m->notes = temp_notes;
+    --m->notes_n;
 }
 
 struct Tab new_tab(struct Tuning tuning, int tickrate) {

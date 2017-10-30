@@ -173,7 +173,7 @@ int draw_measure(struct Window *w, int x, int y, struct Tab *t, struct Measure *
     mvwvline(w->tab, y, x + width, '|', 11);
     for (int i = 0; i < m->notes_n; ++i) {
         struct Note *n = &m->notes[i];
-        mvwprintw(w->tab, 7 + (2 * n->string), x + n->offset, "%d", n->fret);
+        mvwprintw(w->tab, 7 + (2 * n->string), x + (n->offset / TICKS_PER_COLUMN), "%d", n->fret);
     }
     return width + 1;
 }

@@ -46,10 +46,20 @@ bool edit_input(struct State *s, int c) {
     case 'w':
         add_note(s);
         break;
+    // Remove a note
+    case 'x':
+        remove_note(s);
+        break;
     default:
         break;
     }
     return true;
+}
+
+void remove_note(struct State *s) {
+    struct Note *n = measure_get_note(s->tab, s->edit.measure, s->edit.string, s->edit.x);
+    if (n != NULL)
+        measure_remove_note(s->tab, s->edit.measure, n);
 }
 
 void add_note(struct State *s) {
