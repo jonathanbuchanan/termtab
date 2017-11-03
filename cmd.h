@@ -55,4 +55,12 @@ void author(struct State *s, char *author);
 #define CMD_SET_STRING "set_string"
 void set_string(struct State *s, int string, char *tone);
 
+// Exports the tab to a plain text file
+#define CMD_EXPORT_TXT "export_txt"
+void export_txt(struct State *s, char *file);
+
+// Exports the tab to a PDF
+#define CMD_EXPORT_PDF "export_pdf"
+void export_pdf(struct State *s, char *file);
+
 #endif

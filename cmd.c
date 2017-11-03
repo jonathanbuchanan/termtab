@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include "draw.h"
+#include "export.h"
 
 #include "tab.h"
 
@@ -194,6 +195,20 @@ void execute_cmd(struct State *s, struct Command *cmd) {
             return;
         }
         set_string(s, string, arg);
+    } else if (strcmp(cmd->cmd, CMD_EXPORT_TXT) == 0) {
+        char arg[256];
+        if (get_arg(cmd, 0, arg) == false) {
+            cmd_error(s, CMD_MISSING_ARG);
+            return;
+        }
+        export_txt(s, arg);
+    } else if (strcmp(cmd->cmd, CMD_EXPORT_PDF) == 0) {
+        char arg[256];
+        if (get_arg(cmd, 0, arg) == false) {
+            cmd_error(s, CMD_MISSING_ARG);
+            return;
+        }
+        export_pdf(s, arg);
     }
 }
 
@@ -267,4 +282,12 @@ void set_string(struct State *s, int string, char *tone) {
     else {
         // ERROR
     }
+}
+
+void export_txt(struct State *s, char *file) {
+    generate_text_file(s->tab, file);
+}
+
+void export_pdf(struct State *s, char *file) {
+    generate_pdf(s->tab, file);
 }
