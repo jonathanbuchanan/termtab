@@ -24,9 +24,19 @@ struct Fonts {
 #define MARGIN_LEFT 36
 #define MARGIN_RIGHT 36
 
+#define STAFF_EM 24
+#define STAFF_SPACE (STAFF_EM / 4)
+#define BARLINE_THIN (STAFF_SPACE * 0.16)
+#define BARLINE_THICK (STAFF_SPACE * 0.5)
+#define STAFF_LINE (STAFF_SPACE * 0.13)
+#define BRACKET_EXTENSION 2
+
+#define SPACE_PER_TICK(tab) (18 / tab->ticks_per_quarter)
+
 struct Fonts load_fonts(HPDF_Doc doc);
 void pdf_display_header(HPDF_Page page, struct Fonts f, struct Tab *t);
 void pdf_draw_staff(HPDF_Page page, struct Fonts f, int y);
+void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Measure *m, float x, float width, int staff_y);
 void pdf_draw_barline(HPDF_Page page, int x, int y1, int y2, float thickness);
 
 void generate_pdf(struct Tab *t, const char *file) {
@@ -35,13 +45,76 @@ void generate_pdf(struct Tab *t, const char *file) {
     HPDF_UseUTFEncodings(pdf);
     struct Fonts f = load_fonts(pdf);
 
-
-
     HPDF_Page pg1 = HPDF_AddPage(pdf);
     pdf_display_header(pg1, f, t);
-    pdf_draw_staff(pg1, f, 50);
 
+    HPDF_REAL width;
+    width = HPDF_Page_GetWidth(pg1);
 
+    float min_space[t->measures_n];
+    float ideal_space[t->measures_n];
+    for (int i = 0; i < t->measures_n; ++i) {
+        struct Measure *m = &t->measures[i];
+
+        // Compute the minimum space needed for this measure
+        // The minimum space required per note = 2.5 * staff space
+        min_space[i] = 2.5 * STAFF_SPACE * m->notes_n;
+        float ideal = 0;
+        for (int j = 0; j < m->notes_n; ++j) {
+            float n_preffered = SPACE_PER_TICK(t) * m->notes[j].length;
+            float n_min = 2.5 * STAFF_SPACE;
+            if (n_preffered < n_min)
+                ideal += n_min;
+            else
+                ideal += n_preffered;
+        }
+        ideal_space[i] = ideal;
+    }
+
+    int n_lines = 1;
+    int line_number[t->measures_n];
+    float calculated_width[t->measures_n];
+    float usable_width = width - MARGIN_LEFT - MARGIN_RIGHT - 72;
+    float working_width = 0;
+    int leftmost_measure = 0;
+    for (int i = 0; i < t->measures_n; ++i) {
+        // A measure's width should never be < ideal_space unless required to fit on one line
+        // The number of measures should be sufficient such that if one measure were added the width of 1+ measures would be < ideal_space
+
+        if (working_width + ideal_space[i] > usable_width) {
+            // There's no room for this measure. Add it to the next line.
+            // Assess the width of all the measures of the previous line
+            float scale = usable_width / working_width;
+            for (int j = leftmost_measure; j < i; ++j) {
+                calculated_width[j] = ideal_space[j] * scale;
+            }
+
+            ++n_lines;
+            leftmost_measure = i;
+            line_number[i] = n_lines - 1;
+        } else {
+            // Add this 
+            line_number[i] = n_lines - 1;
+            working_width += ideal_space[i];
+        }
+    }
+    float scale = usable_width / working_width;
+    for (int i = leftmost_measure; i < t->measures_n; ++i)
+        calculated_width[i] = ideal_space[i] * scale;
+
+    int m = 0;
+    float x = MARGIN_LEFT + 72;
+    for (int i = 0; i < n_lines; ++i) {
+        // Draw the line
+        pdf_draw_staff(pg1, f, 600 - (100 * i));
+        while (line_number[m] == i) {
+           pdf_draw_measure(pg1, f, &t->measures[m], x, calculated_width[m], 600 - (100 * i));
+
+           x += calculated_width[m];
+           ++m;
+        }
+        x = MARGIN_LEFT + 100;
+    }
 
     HPDF_SaveToFile(pdf, file);
     HPDF_Free(pdf);
@@ -76,12 +149,7 @@ void pdf_display_header(HPDF_Page page, struct Fonts f, struct Tab *t) {
     HPDF_Page_EndText(page);
 }
 
-#define STAFF_EM 24
-#define STAFF_SPACE (STAFF_EM / 4)
-#define BARLINE_THIN (STAFF_SPACE * 0.16)
-#define BARLINE_THICK (STAFF_SPACE * 0.5)
-#define STAFF_LINE (STAFF_SPACE * 0.13)
-#define BRACKET_EXTENSION 2
+
 void pdf_draw_staff(HPDF_Page page, struct Fonts f, int y) {
     HPDF_REAL width = HPDF_Page_GetWidth(page);
 
@@ -142,6 +210,14 @@ void pdf_draw_staff(HPDF_Page page, struct Fonts f, int y) {
     HPDF_Page_MoveTextPos(page, MARGIN_LEFT - 6.5, bracket_y + bracket_height);
     HPDF_Page_ShowText(page, "\xEE\x80\x83");
     HPDF_Page_EndText(page);
+}
+
+void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Measure *m, float x, float width, int y) {
+    // Draw upper barline
+    pdf_draw_barline(page, x + width, y + 50, y + 50 + STAFF_EM, BARLINE_THIN);
+
+    // Draw lower barline
+    pdf_draw_barline(page, x + width, y, y + (STAFF_SPACE * 5), BARLINE_THIN);
 }
 
 void pdf_draw_barline(HPDF_Page page, int x, int y1, int y2, float thickness) {
