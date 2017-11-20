@@ -92,6 +92,75 @@ struct Note string_to_note(const char *str, int string_number, int offset, int l
     return n;
 }
 
+int tones_distance(struct Tone a, struct Tone b) {
+    const int distance_from_C[] = {
+        9,  // A
+        11, // B
+        0,  // C
+        2,  // D
+        4,  // E
+        5,  // F
+        7,  // G
+    };
+
+    const int shift[] = {
+        -2, // Double Flat
+        -1, // Flat
+        0,  // Natural
+        1,  // Sharp
+        2,  // Double Sharp
+    };
+
+    const int distance_per_octave = 12;
+
+    return ((b.octave - a.octave) * distance_per_octave) + ((distance_from_C[b.note] + shift[b.shift]) - (distance_from_C[a.note] + shift[a.shift]));
+}
+
+int tones_distance_diatonic(struct Tone a, struct Tone b) {
+    const int distance_from_C[] = {
+        5, // A
+        6, // B
+        0, // C
+        1, // D
+        2, // E
+        3, // F
+        4  // G
+    };
+
+    const int distance_per_octave = 7;
+
+    return ((b.octave - a.octave) * distance_per_octave) + (distance_from_C[b.note] - distance_from_C[a.note]);
+}
+
+struct Tone tone_increment_diatonic(struct Tone t) {
+    if (t.note != G && t.note != B)
+        return (struct Tone){t.note + 1, Natural, t.octave};
+    else if (t.note == B)
+        return (struct Tone){t.note + 1, Natural, t.octave + 1};
+    else// if (t.note == G)
+        return (struct Tone){A, Natural, t.octave};
+}
+
+struct Tone tone_increment_semitone(struct Tone t) {
+    switch (t.shift) {
+        case DoubleFlat: return (struct Tone){t.note, Flat, t.octave}; break;
+        case Flat: return (struct Tone){t.note, Natural, t.octave}; break;
+        case Natural: return (struct Tone){t.note, Sharp, t.octave}; break;
+        case Sharp: return (struct Tone){t.note, DoubleSharp, t.octave}; break;
+        default: return (struct Tone){t.note, t.shift, t.octave}; break;
+    }
+}
+
+struct Tone tone_add_semitones(struct Tone t, int semitones) {
+    // Keep going up until the diatonic distance is 0
+    struct Tone new = t;
+    while (tones_distance(t, tone_increment_diatonic(new)) <= semitones) {
+        new = tone_increment_diatonic(new);
+    }
+
+    return new;
+}
+
 struct Measure * new_measure(struct Tab *tab, int ts_top, int ts_bottom) {
     if (tab->measures_n == tab->measures_size) {
         tab->measures = realloc(tab->measures, sizeof(struct Measure) * tab->measures_size * 2);

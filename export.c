@@ -1,5 +1,6 @@
 #include "export.h"
 #include <hpdf.h>
+#include <stdio.h>
 
 void generate_text_file(struct Tab *t, const char *file) {
 
@@ -31,13 +32,15 @@ struct Fonts {
 #define STAFF_LINE (STAFF_SPACE * 0.13)
 #define BRACKET_EXTENSION 2
 
-#define SPACE_PER_TICK(tab) (18 / tab->ticks_per_quarter)
+#define SPACE_PER_TICK(tab) ((STAFF_SPACE * 6) / (float)tab->ticks_per_quarter)
 
 struct Fonts load_fonts(HPDF_Doc doc);
 void pdf_display_header(HPDF_Page page, struct Fonts f, struct Tab *t);
 void pdf_draw_staff(HPDF_Page page, struct Fonts f, int y);
-void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Measure *m, float x, float width, int staff_y);
+void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Tab *t, struct Measure *m, float x, float width, int staff_y);
 void pdf_draw_barline(HPDF_Page page, int x, int y1, int y2, float thickness);
+
+float pdf_measure_ideal_width(struct Tab *t, struct Measure *m);
 
 void generate_pdf(struct Tab *t, const char *file) {
     HPDF_Doc pdf;
@@ -55,20 +58,11 @@ void generate_pdf(struct Tab *t, const char *file) {
     float ideal_space[t->measures_n];
     for (int i = 0; i < t->measures_n; ++i) {
         struct Measure *m = &t->measures[i];
-
         // Compute the minimum space needed for this measure
         // The minimum space required per note = 2.5 * staff space
         min_space[i] = 2.5 * STAFF_SPACE * m->notes_n;
-        float ideal = 0;
-        for (int j = 0; j < m->notes_n; ++j) {
-            float n_preffered = SPACE_PER_TICK(t) * m->notes[j].length;
-            float n_min = 2.5 * STAFF_SPACE;
-            if (n_preffered < n_min)
-                ideal += n_min;
-            else
-                ideal += n_preffered;
-        }
-        ideal_space[i] = ideal;
+        
+        ideal_space[i] = pdf_measure_ideal_width(t, m);
     }
 
     int n_lines = 1;
@@ -108,7 +102,7 @@ void generate_pdf(struct Tab *t, const char *file) {
         // Draw the line
         pdf_draw_staff(pg1, f, 600 - (100 * i));
         while (line_number[m] == i) {
-           pdf_draw_measure(pg1, f, &t->measures[m], x, calculated_width[m], 600 - (100 * i));
+           pdf_draw_measure(pg1, f, t, &t->measures[m], x, calculated_width[m], 600 - (100 * i));
 
            x += calculated_width[m];
            ++m;
@@ -118,6 +112,19 @@ void generate_pdf(struct Tab *t, const char *file) {
 
     HPDF_SaveToFile(pdf, file);
     HPDF_Free(pdf);
+}
+
+float pdf_measure_ideal_width(struct Tab *t, struct Measure *m) {
+    float ideal = 0;
+    for (int j = 0; j < m->notes_n; ++j) {
+        float n_preffered = SPACE_PER_TICK(t) * m->notes[j].length;
+        float n_min = 2.5 * STAFF_SPACE;
+        if (n_preffered < n_min)
+            ideal += n_min;
+        else
+            ideal += n_preffered;
+    }
+    return ideal;
 }
 
 struct Fonts load_fonts(HPDF_Doc doc) {
@@ -212,12 +219,49 @@ void pdf_draw_staff(HPDF_Page page, struct Fonts f, int y) {
     HPDF_Page_EndText(page);
 }
 
-void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Measure *m, float x, float width, int y) {
+void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Tab *t, struct Measure *m, float x, float width, int y) {
     // Draw upper barline
     pdf_draw_barline(page, x + width, y + 50, y + 50 + STAFF_EM, BARLINE_THIN);
 
     // Draw lower barline
     pdf_draw_barline(page, x + width, y, y + (STAFF_SPACE * 5), BARLINE_THIN);
+
+    float scale = width / pdf_measure_ideal_width(t, m);
+
+    float offset = 0;
+    for (int i = 0; i < m->notes_n; ++i) {
+        struct Note *n = &m->notes[i];
+        float allocated_width;
+        float n_preffered = SPACE_PER_TICK(t) * n->length;
+        float n_min = 2.5 * STAFF_SPACE;
+        if (n_preffered < n_min)
+            allocated_width = n_min * scale;
+        else
+            allocated_width = n_preffered * scale;
+
+        // Calculate the y-placement of the notehead. Move the notehead half a staff-space per semitone of difference from E3.
+        const struct Tone e3 = {E, Natural, 3};
+
+        struct Tone tone = tone_add_semitones(t->info.tuning.strings[n->string], n->fret);
+        float notehead_y = y + 50 + ((STAFF_SPACE / 2) * tones_distance_diatonic(e3, tone));
+
+        HPDF_Page_BeginText(page);
+        HPDF_Page_SetFontAndSize(page, f.music, STAFF_EM);
+        HPDF_Page_MoveTextPos(page, x + offset, notehead_y);
+        HPDF_Page_ShowText(page, "\xEE\x82\xA4");
+        HPDF_Page_EndText(page);
+
+        // Draw the fret number
+        char fret[8];
+        sprintf(fret, "%d", n->fret);
+        HPDF_Page_BeginText(page);
+        HPDF_Page_SetFontAndSize(page, f.normal, STAFF_EM / 4);
+        HPDF_Page_MoveTextPos(page, x + offset, y + (STAFF_SPACE * (5 - n->string)));
+        HPDF_Page_ShowText(page, fret);
+        HPDF_Page_EndText(page);
+
+        offset += allocated_width;
+    }
 }
 
 void pdf_draw_barline(HPDF_Page page, int x, int y1, int y2, float thickness) {

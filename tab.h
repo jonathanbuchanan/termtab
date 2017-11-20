@@ -43,6 +43,15 @@ struct Tone string_to_tone(const char *str);
 // Returns a note for a string
 struct Note string_to_note(const char *str, int string, int offset, int length);
 
+// Computes the distance (in semitones) between two tones. If b > a, result is positive. If a > b, result is negative.
+int tones_distance(struct Tone a, struct Tone b);
+
+// Computes the diatonic distance between two tones
+int tones_distance_diatonic(struct Tone a, struct Tone b);
+
+// Returns a tone for another tone and a distance to add to it
+struct Tone tone_add_semitones(struct Tone t, int semitones);
+
 struct Tuning {
     struct Tone strings[6];
 };
