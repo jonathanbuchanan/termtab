@@ -115,7 +115,7 @@ void generate_pdf(struct Tab *t, const char *file) {
 }
 
 float pdf_measure_ideal_width(struct Tab *t, struct Measure *m) {
-    float ideal = 0;
+    /*float ideal = 0;
     for (int j = 0; j < m->notes_n; ++j) {
         float n_preffered = SPACE_PER_TICK(t) * m->notes[j].length;
         float n_min = 2.5 * STAFF_SPACE;
@@ -124,7 +124,8 @@ float pdf_measure_ideal_width(struct Tab *t, struct Measure *m) {
         else
             ideal += n_preffered;
     }
-    return ideal;
+    return ideal;*/
+    return SPACE_PER_TICK(t) * ((m->ts_top * t->ticks_per_quarter * 4) / m->ts_bottom);
 }
 
 struct Fonts load_fonts(HPDF_Doc doc) {
@@ -219,6 +220,12 @@ void pdf_draw_staff(HPDF_Page page, struct Fonts f, int y) {
     HPDF_Page_EndText(page);
 }
 
+#define STEM_THICKNESS (STAFF_SPACE * 0.12)
+#define STEM_UP_BOTTOM_RIGHT_X (STAFF_SPACE * 1.18)
+#define STEM_UP_BOTTOM_RIGHT_Y (STAFF_SPACE * 0.168)
+#define STEM_DOWN_TOP_LEFT_X (STAFF_SPACE * 0.0)
+#define STEM_DOWN_TOP_LEFT_Y (STAFF_SPACE * -0.168)
+
 void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Tab *t, struct Measure *m, float x, float width, int y) {
     // Draw upper barline
     pdf_draw_barline(page, x + width, y + 50, y + 50 + STAFF_EM, BARLINE_THIN);
@@ -245,18 +252,32 @@ void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Tab *t, struct Meas
         struct Tone tone = tone_add_semitones(t->info.tuning.strings[n->string], n->fret);
         float notehead_y = y + 50 + ((STAFF_SPACE / 2) * tones_distance_diatonic(e3, tone));
 
+        float notehead_x = x + (SPACE_PER_TICK(t) * n->offset * scale);
+
         HPDF_Page_BeginText(page);
         HPDF_Page_SetFontAndSize(page, f.music, STAFF_EM);
-        HPDF_Page_MoveTextPos(page, x + offset, notehead_y);
+        HPDF_Page_MoveTextPos(page, notehead_x, notehead_y);
         HPDF_Page_ShowText(page, "\xEE\x82\xA4");
         HPDF_Page_EndText(page);
+
+        // Stem goes up or down?
+        const struct Tone b3 = {B, Natural, 3};
+        if (tones_distance_diatonic(b3, tone) < 0) {
+            // Up
+            HPDF_Page_Rectangle(page, notehead_x + STEM_UP_BOTTOM_RIGHT_X - STEM_THICKNESS, notehead_y + STEM_UP_BOTTOM_RIGHT_Y, STEM_THICKNESS, 3.5 * STAFF_SPACE);
+            HPDF_Page_Fill(page);
+        } else {
+            // Down
+            HPDF_Page_Rectangle(page, notehead_x + STEM_DOWN_TOP_LEFT_X, notehead_y + STEM_DOWN_TOP_LEFT_Y, STEM_THICKNESS, -3.5 * STAFF_SPACE);
+            HPDF_Page_Fill(page);
+        }
 
         // Draw the fret number
         char fret[8];
         sprintf(fret, "%d", n->fret);
         HPDF_Page_BeginText(page);
         HPDF_Page_SetFontAndSize(page, f.normal, STAFF_EM / 4);
-        HPDF_Page_MoveTextPos(page, x + offset, y + (STAFF_SPACE * (5 - n->string)));
+        HPDF_Page_MoveTextPos(page, notehead_x, y + (STAFF_SPACE * (5 - n->string)));
         HPDF_Page_ShowText(page, fret);
         HPDF_Page_EndText(page);
 

@@ -3,6 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define STATUS_WINDOW_HEIGHT 1
+#define CMD_WINDOW_HEIGHT 1
+#define TAB_WINDOW_HEIGHT(term_height) (term_height - STATUS_WINDOW_HEIGHT - CMD_WINDOW_HEIGHT)
+
 struct Window {
     WINDOW *term;
     WINDOW *tab;
@@ -23,6 +27,7 @@ void end_input();
 struct Window * init_window() {
     struct Window *w = malloc(sizeof(struct Window));
     w->term = initscr();
+    use_default_colors();
     init_tab_window(w);
     init_status_window(w);
     init_cmd_window(w);
@@ -33,17 +38,14 @@ void kill_window(const struct Window *window) {
     endwin();
 }
 
-#define TAB_WINDOW_HEIGHT 20
 void init_tab_window(struct Window *window) {
     int y, x;
     getmaxyx(window->term, y, x);
-    WINDOW *tab = newwin(TAB_WINDOW_HEIGHT, x, 0, 0);
-    mvwhline(tab, TAB_WINDOW_HEIGHT - 1, 0, '_', x);
+    WINDOW *tab = newwin(TAB_WINDOW_HEIGHT(y), x, 0, 0);
     wrefresh(tab);
     window->tab = tab;
 }
 
-#define STATUS_WINDOW_HEIGHT 1
 void init_status_window(struct Window *window) {
     int y, x;
     getmaxyx(window->term, y, x);
@@ -55,7 +57,6 @@ void init_status_window(struct Window *window) {
     window->status = status;
 }
 
-#define CMD_WINDOW_HEIGHT 1
 void init_cmd_window(struct Window *window) {
     int y, x;
     getmaxyx(window->term, y, x);
@@ -127,32 +128,65 @@ void draw_tab(struct State *state) {
     struct Window *window = state->window;
     struct Tab *tab = state->tab;
 
+    realloc_cache(&state->edit.layout, tab->measures_n);
+
     int height, width;
     getmaxyx(window->term, height, width);
     // Title and band
     mvwprintw(window->tab, 0, 0, "Title: %s", tab->info.title);
     mvwprintw(window->tab, 1, 0, "Author: %s", tab->info.band);
 
-    // Draw tuning and lines
-    for (int i = 0; i < 6; ++i) {
-        int y = 7 + (2 * i);
-        char buff[5];
-        tone_to_string(tab->info.tuning.strings[i], buff, 5);
-        mvwprintw(window->tab, y, 0, "%d", i);
-        mvwprintw(window->tab, y, 2, buff);
-        mvwhline(window->tab, y, 8, '-', width);
-    }
+    // Draw measures 
+    int available_width = width - 8;
+    int line_number[state->tab->measures_n];
+    int lines = 1;
 
-    // Draw seperating line
-    mvwvline(window->tab, 7, 7, '|', 11);
-
-    // Draw barlines
-    int x = 8;
+    int used_width = 0;
     for (int i = 0; i < state->tab->measures_n; ++i) {
-        x += draw_measure(window, x, 7, state->tab, &state->tab->measures[i]);
+        if (used_width + measure_width(tab, &state->tab->measures[i]) <= available_width) {
+            // This measure fits
+            line_number[i] = lines - 1;
+            used_width += measure_width(tab, &state->tab->measures[i]);
+
+
+            state->edit.layout.line_numbers[i] = lines - 1;
+        } else {
+            // This measure can't fit, make a new line
+            ++lines;
+            used_width = 0;
+            line_number[i] = lines - 1;
+            state->edit.layout.line_numbers[i] = lines - 1;
+        }
     }
 
-    mvwhline(window->tab, TAB_WINDOW_HEIGHT - 1, 0, '_', width);
+    int m = 0;
+    int offset = 8;
+    for (int i = 0; i < lines; ++i) {
+        int y = 7 + (14 * i);
+
+        // Draw tuning and lines
+        for (int i = 0; i < 6; ++i) {
+            int y_line = y + (2 * i);
+            char buff[5];
+            tone_to_string(tab->info.tuning.strings[i], buff, 5);
+            mvwprintw(window->tab, y_line, 0, "%d", i);
+            mvwprintw(window->tab, y_line, 2, buff);
+            mvwhline(window->tab, y_line, 8, '-', width);
+        }
+
+        // Draw seperating line
+        mvwvline(window->tab, y, 7, '|', 11);
+        mvwhline(window->tab, y + 12, 0, '_', width);
+
+        while (line_number[m] == i) {
+            state->edit.layout.offsets[m] = offset;
+            offset += draw_measure(window, offset, y, tab, &state->tab->measures[m]);
+            ++m;
+        }
+
+        offset = 8;
+    }
+
     wrefresh(window->tab);
 }
 
@@ -173,9 +207,13 @@ int draw_measure(struct Window *w, int x, int y, struct Tab *t, struct Measure *
     mvwvline(w->tab, y, x + width, '|', 11);
     for (int i = 0; i < m->notes_n; ++i) {
         struct Note *n = &m->notes[i];
-        mvwprintw(w->tab, 7 + (2 * n->string), x + (n->offset / TICKS_PER_COLUMN), "%d", n->fret);
+        mvwprintw(w->tab, y + (2 * n->string), x + (n->offset / TICKS_PER_COLUMN), "%d", n->fret);
     }
     return width + 1;
+}
+
+int measure_width(struct Tab *t, struct Measure *m) {
+    return ((m->ts_top * t->ticks_per_quarter * 4) / (m->ts_bottom * TICKS_PER_COLUMN)) + 1;
 }
 
 void position_cursor(struct State *state) {
@@ -185,15 +223,16 @@ void position_cursor(struct State *state) {
     struct Window *window = state->window;
     int w = state->edit.cursor_width / TICKS_PER_COLUMN;
 
-    // Offset from measures
-    int offset_m = 0;
-    for (int i = 0; i < state->edit.measure; ++i)
-        offset_m += (measure_get_ticks(state->tab, i) / TICKS_PER_COLUMN) + 1;
+    // Find x and y position
+    int x = state->edit.layout.offsets[state->edit.measure];
+    int y = 7 + (14 * state->edit.layout.line_numbers[state->edit.measure]) + (2 * state->edit.string);
+
+
 
     // Offset within measure
     int offset_x = state->edit.x / TICKS_PER_COLUMN;
 
-    wmove(window->tab, 7 + (2 * state->edit.string), 8 + offset_m + offset_x/*8 + ((state->edit.x + (9 * state->edit.measure)) / 2)*/);
+    wmove(window->tab, y, x + offset_x);
     wattron(window->tab, COLOR_PAIR(2));
     for (int i = 0; i < w; ++i)
         waddch(window->tab, ' ');
@@ -206,4 +245,9 @@ void position_cursor(struct State *state) {
 
 int next_char(struct Window *window) {
     return wgetch(window->cmd);
+}
+
+void realloc_cache(struct LayoutCache *cache, int m) {
+    cache->line_numbers = realloc(cache->line_numbers, sizeof(int) * m);
+    cache->offsets = realloc(cache->offsets, sizeof(int) * m);
 }

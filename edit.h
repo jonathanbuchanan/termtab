@@ -5,12 +5,21 @@
 #include "tab.h"
 
 struct State;
+
+struct LayoutCache {
+    int *line_numbers;
+    int *offsets;
+};
+
 struct EditingState {
     // The cursor defines a selection of a certain width. All measurements in terms of ticks
     int string;
     int measure;
     int x;
     int cursor_width;
+
+    // Caches the layout of the tab editor
+    struct LayoutCache layout;
 };
 
 

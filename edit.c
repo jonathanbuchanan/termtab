@@ -31,7 +31,7 @@ bool edit_input(struct State *s, int c) {
             --s->edit.measure;
         break;
     case 'm':
-        if (s->edit.measure < s->tab->measures_n)
+        if (s->edit.measure < s->tab->measures_n - 1)
             ++s->edit.measure;
         break;
     // Increase cursor size
