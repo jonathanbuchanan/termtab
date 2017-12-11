@@ -2,8 +2,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <ctype.h>
 #include <errno.h>
+#include <stdbool.h>
 
 void tone_to_string(struct Tone tone, char *buffer, size_t n) {
     char *note;
@@ -161,6 +163,10 @@ struct Tone tone_add_semitones(struct Tone t, int semitones) {
     return new;
 }
 
+struct Tone note_to_tone(struct Tab *t, struct Note n) {
+    return tone_add_semitones(t->info.tuning.strings[n.string], n.fret);
+}
+
 struct Measure * new_measure(struct Tab *tab, int ts_top, int ts_bottom) {
     if (tab->measures_n == tab->measures_size) {
         tab->measures = realloc(tab->measures, sizeof(struct Measure) * tab->measures_size * 2);
@@ -213,7 +219,7 @@ void measure_remove_note(struct Tab *t, int _m, struct Note *n) {
 }
 
 struct Tab new_tab(struct Tuning tuning, int tickrate) {
-    struct Tab t = {{"", "", tuning}, "", malloc(sizeof(struct Measure)), 0, 1, tickrate};
+    struct Tab t = {{NULL, NULL, tuning}, "", malloc(sizeof(struct Measure)), 0, 1, tickrate};
     t.measures = new_measure(&t, 4, 4);
     return t;
 }
@@ -258,7 +264,163 @@ struct Tab new_tab(struct Tuning tuning, int tickrate) {
 /// End of file
 // 0xFF 0xFF
 
-#define BLOCK_EQUAL(a, b) (a[0] == b[0] && a[1] == b[1])
+#define FORMAT_VERSION (uint32_t)(1)
+
+const char magic_number[4] = {0x54, 0x41, 0x42, 0x53};
+const char title_marker[4] = {0xFF, 0x00, 0x00, 0xFF};
+const char author_marker[4] = {0xFF, 0x00, 0x01, 0xFF};
+const char tuning_marker[4] = {0xFF, 0x00, 0x02, 0xFF};
+const char tab_marker[4] = {0xFF, 0x00, 0x03, 0xFF};
+const char measure_marker[4] = {0xFF, 0x00, 0x04, 0xFF};
+const char note_marker[4] = {0xFF, 0x00, 0x05, 0xFF};
+const char end_marker[4] = {0xFF, 0xFF, 0xFF, 0xFF};
+
+bool compare_blocks(const char *a, const char *b) {
+    for (int i = 0; i < 4; ++i) {
+        if (a[i] != b[i])
+            return false;
+    }
+    return true;
+}
+
+void process_title(struct Tab *t, FILE *f) {
+    uint32_t length;
+    fread(&length, sizeof(uint32_t), 1, f);
+    t->info.title = malloc(sizeof(char) * length);
+    fread(t->info.title, sizeof(char), length, f);
+}
+
+void process_author(struct Tab *t, FILE *f) {
+    uint32_t length;
+    fread(&length, sizeof(uint32_t), 1, f);
+    t->info.band = malloc(sizeof(char) * length);
+    fread(t->info.band, sizeof(char), length, f);
+}
+
+void process_tuning(struct Tab *t, FILE *f) {
+    for (int i = 0; i < 6; ++i) {
+        struct Tone *tone = &t->info.tuning.strings[i];
+        uint8_t note;
+        uint8_t shift;
+        uint8_t octave;
+
+        fread(&note, sizeof(uint8_t), 1, f);
+        fread(&shift, sizeof(uint8_t), 1, f);
+        fread(&octave, sizeof(uint8_t), 1, f);
+
+        tone->note = note;
+        tone->shift = shift;
+        tone->octave = octave;
+    }
+}
+
+void process_note(struct Note *n, FILE *f) {
+    uint8_t string;
+    uint8_t fret;
+    uint32_t offset;
+    uint32_t length;
+
+    fread(&string, sizeof(uint8_t), 1, f);
+    fread(&fret, sizeof(uint8_t), 1, f);
+    fread(&offset, sizeof(uint32_t), 1, f);
+    fread(&length, sizeof(uint32_t), 1, f);
+
+    n->string = string;
+    n->fret = fret;
+    n->offset = offset;
+    n->length = length;
+}
+
+void process_measure(struct Measure *m, FILE *f) {
+    uint8_t ts_top;
+    uint8_t ts_bottom;
+    uint32_t notes_n;
+
+    fread(&ts_top, sizeof(uint8_t), 1, f);
+    fread(&ts_bottom, sizeof(uint8_t), 1, f);
+    fread(&notes_n, sizeof(uint32_t), 1, f);
+
+    m->notes = malloc(sizeof(struct Note) * notes_n);
+
+    // Loop over blocks
+    int i = 0;
+    while (i < notes_n) {
+        char block[4];
+        uint32_t block_length;
+        fread(block, sizeof(char), 4, f);
+        fread(&block_length, sizeof(uint32_t), 1, f);
+
+        if (compare_blocks(block, note_marker)) { process_note(&m->notes[i], f); ++i; }
+        else {
+            // The block cannot be identified. skip to the next
+            fseek(f, block_length, SEEK_CUR);
+        }
+    }
+
+    m->ts_top = ts_top;
+    m->ts_bottom = ts_bottom;
+    m->notes_n = notes_n;
+}
+
+void process_tab_data(struct Tab *t, FILE *f) {
+    // Tab
+    uint32_t tickrate;
+    uint32_t measures_n;
+
+    fread(&tickrate, sizeof(uint32_t), 1, f);
+    fread(&measures_n, sizeof(uint32_t), 1, f);
+
+    t->measures = malloc(sizeof(struct Measure) * measures_n);
+
+    // Loop over blocks
+    int i = 0;
+    while (i < measures_n) {
+        char block[4];
+        uint32_t block_length;
+        fread(block, sizeof(char), 4, f);
+        fread(&block_length, sizeof(uint32_t), 1, f);
+
+        if (compare_blocks(block, measure_marker)) { process_measure(&t->measures[i], f); ++i; }
+        else {
+            // The block cannot be identified. skip to the next
+            fseek(f, block_length, SEEK_CUR);
+        }
+    }
+    /*for (int i = 0; i < tab->measures_n; ++i) {
+        struct Measure *m = &tab->measures[i];
+
+        uint32_t measure_length;
+        uint8_t ts_top = m->ts_top;
+        uint8_t ts_bottom = m->ts_bottom;
+        uint32_t notes_n = m->notes_n;
+
+        fwrite(measure_marker, sizeof(char), 4, f);
+        fwrite(&measure_length, sizeof(uint32_t), 1, f);
+        fwrite(&ts_top, sizeof(uint8_t), 1, f);
+        fwrite(&ts_bottom, sizeof(uint8_t), 1, f);
+        fwrite(&notes_n, sizeof(uint32_t), 1, f);
+        for (int j = 0; j < m->notes_n; ++j) {
+            struct Note *n = &measure->notes[j];
+
+            uint32_t note_length;
+            uint8_t string = n->string;
+            uint8_t fret = n->fret;
+            uint32_t offset = n->offset;
+            uint32_t length = n->length;
+
+            fwrite(note_marker, sizeof(char), 4, f);
+            fwrite(&note_length, sizeof(uint32_t), 1, f);
+            fwrite(&string, sizeof(uint8_t), 1, f);
+            fwrite(&fret, sizeof(uint8_t), 1, f);
+            fwrite(&offset, sizeof(uint32_t), 1, f);
+            fwrite(&length, sizeof(uint32_t), 1, f);
+        }
+    }*/
+
+    t->ticks_per_quarter = tickrate;
+    t->measures_n = measures_n;
+}
+
 void open_tab(struct Tab *t, const char *file) {
     FILE *f = fopen(file, "rb");
 
@@ -271,28 +433,26 @@ void open_tab(struct Tab *t, const char *file) {
     }
 
     // Check file version
-    const char version_code[] = {0x00, 0x00};
-    char read_version_code[2];
-    fread(read_version_code, sizeof(char), 2, f);
-    if (strncmp(version_code, read_version_code, 2) != 0) {
-        // ERROR!
-    }
-
-    char version[4];
-    fread(version, sizeof(char), 4, f);
+    uint32_t version;
+    fread(&version, sizeof(char), 4, f);
 
     // Loop over blocks
     while (1) {
-        char block[2];
-        fread(block, sizeof(char), 2, f);
+        char block[4];
+        uint32_t block_length;
+        fread(block, sizeof(char), 4, f);
+        fread(&block_length, sizeof(uint32_t), 1, f);
 
-        const char title_code[] = {0x00, 0x01};
-        const char author_code[] = {0x00, 0x02};
-        const char tuning_code[] = {0x00, 0x03};
-        const char tab_code[] = {0x00, 0x10};
-        const char end_of_file[] = {0xFF, 0xFF};
-
-        if (BLOCK_EQUAL(block, title_code)) {
+        if (compare_blocks(block, title_marker)) { process_title(t, f); }
+        else if (compare_blocks(block, author_marker)) { process_author(t, f); }
+        else if (compare_blocks(block, tuning_marker)) { process_tuning(t, f); }
+        else if (compare_blocks(block, tab_marker)) { process_tab_data(t, f); }
+        else if (compare_blocks(block, end_marker)) { break; }
+        else {
+            // The block cannot be identified. skip to the next
+            fseek(f, block_length, SEEK_CUR);
+        }
+        /*if (BLOCK_EQUAL(block, title_code)) {
             int len;
             fread(&len, sizeof(int), 1, f);
             t->info.title = malloc(sizeof(char) * len);
@@ -329,25 +489,9 @@ void open_tab(struct Tab *t, const char *file) {
             t->measures_n = measures_n;
             t->measures_size = measures_n;
             for (int i = 0; i < t->measures_n; ++i) {
-                struct Measure *m = &t->measures[i];                
-                fread(&m->ts_top, sizeof(int), 1, f);
-                fread(&m->ts_bottom, sizeof(int), 1, f);
-
-                int notes_n;
-                fread(&notes_n, sizeof(size_t), 1, f);
-
-                m->notes = malloc(sizeof(struct Note) * notes_n);
-                m->notes_n = notes_n;
-                m->notes_size = notes_n;
-                for (int j = 0; j < m->notes_n; ++j) {
-                    struct Note *n = &m->notes[j];
-                    fread(&n->string, sizeof(int), 1, f);
-                    fread(&n->fret, sizeof(int), 1, f);
-                    fread(&n->offset, sizeof(int), 1, f);
-                    fread(&n->length, sizeof(int), 1, f);
-                }
+                process_measure(&t->measures[i], f);
             }
-        }
+        }*/
     }
 
     fclose(f);
@@ -356,61 +500,88 @@ void open_tab(struct Tab *t, const char *file) {
 void save_tab(const struct Tab *tab, const char *file) {
     FILE *f = fopen(file, "wb");
 
-    // Write tab info (title, author, tuning, etc) first
-    const char sig[] = {0x54, 0x41, 0x42, 0x53};
-    fwrite(sig, sizeof(char), 4, f);
+    // Magic Number
+    fwrite(&magic_number, sizeof(char), 4, f);
 
-    const char version_code[] = {0x00, 0x00};
-    const char version[] = {0x00, 0x00, 0x00, 0x00};
-    fwrite(version_code, sizeof(char), 2, f);
-    fwrite(version, sizeof(char), 4, f);
+    // Version
+    uint32_t version = FORMAT_VERSION;
+    fwrite(&version, sizeof(uint32_t), 1, f);
 
-    const char title_code[] = {0x00, 0x01};
-    fwrite(title_code, sizeof(char), 2, f);
-    int title_len = strlen(tab->info.title) + 1;
-    fwrite(&title_len, sizeof(int), 1, f);
-    fwrite(tab->info.title, sizeof(char), strlen(tab->info.title) + 1, f); 
+    // Title
+    uint32_t title_length = strlen(tab->info.title) + 1;
+    uint32_t title_block_length = sizeof(uint32_t) + title_length;
+    fwrite(title_marker, sizeof(char), 4, f);
+    fwrite(&title_block_length, sizeof(uint32_t), 1, f);
+    fwrite(&title_length, sizeof(uint32_t), 1, f);
+    fwrite(tab->info.title, sizeof(char), title_length, f); 
 
-    const char author_code[] = {0x00, 0x02};
-    fwrite(author_code, sizeof(char), 2, f);
-    int author_len = strlen(tab->info.band) + 1;
-    fwrite(&author_len, sizeof(int), 1, f);
-    fwrite(tab->info.band, sizeof(char), strlen(tab->info.band) + 1, f);
+    // Author
+    uint32_t author_length = strlen(tab->info.band) + 1;
+    uint32_t author_block_length = sizeof(uint32_t) + author_length;
+    fwrite(author_marker, sizeof(char), 4, f);
+    fwrite(&author_block_length, sizeof(uint32_t), 1, f);
+    fwrite(&author_length, sizeof(uint32_t), 1, f);
+    fwrite(tab->info.band, sizeof(char), author_length, f);
 
-
-    const char tuning_code[] = {0x00, 0x03};
-    fwrite(tuning_code, sizeof(char), 2, f);
+    // Tuning
+    uint32_t tuning_length = (sizeof(uint8_t) * 3) * 6;
+    fwrite(tuning_marker, sizeof(char), 4, f);
+    fwrite(&tuning_length, sizeof(uint32_t), 1, f);
     for (int i = 0; i < 6; ++i) {
         struct Tone tone = tab->info.tuning.strings[i];
-        // Note
-        fwrite(&tone.note, sizeof(int), 1, f);
-        // Shift
-        fwrite(&tone.shift, sizeof(int), 1, f);
-        // Octave
-        fwrite(&tone.octave, sizeof(int), 1, f);
+        uint8_t note = tone.note;
+        uint8_t shift = tone.shift;
+        uint8_t octave = tone.octave;
+
+        fwrite(&note, sizeof(uint8_t), 1, f);
+        fwrite(&shift, sizeof(uint8_t), 1, f);
+        fwrite(&octave, sizeof(uint8_t), 1, f);
     }
 
-    const char tab_code[] = {0x00, 0x10};
-    fwrite(tab_code, sizeof(char), 2, f);
-    fwrite(&tab->ticks_per_quarter, sizeof(int), 1, f);
-    fwrite(&tab->measures_n, sizeof(size_t), 1, f);
+    // Tab
+    uint32_t tab_length;
+    uint32_t tickrate = tab->ticks_per_quarter;
+    uint32_t measures_n = tab->measures_n;
+    fwrite(tab_marker, sizeof(char), 4, f);
+    fwrite(&tab_length, sizeof(uint32_t), 1, f);
+    fwrite(&tickrate, sizeof(uint32_t), 1, f);
+    fwrite(&measures_n, sizeof(uint32_t), 1, f);
     for (int i = 0; i < tab->measures_n; ++i) {
         struct Measure *m = &tab->measures[i];
 
-        fwrite(&m->ts_top, sizeof(int), 1, f);
-        fwrite(&m->ts_bottom, sizeof(int), 1, f);
-        fwrite(&m->notes_n, sizeof(size_t), 1, f);
-        for (int i = 0; i < m->notes_n; ++i) {
-            fwrite(&m->notes[i].string, sizeof(int), 1, f);
-            fwrite(&m->notes[i].fret, sizeof(int), 1, f);
-            fwrite(&m->notes[i].offset, sizeof(int), 1, f);
-            fwrite(&m->notes[i].length, sizeof(int), 1, f);
+        uint32_t measure_length = sizeof(char) + (sizeof(uint8_t) * 2) + (sizeof(uint32_t) * 2) +
+                    (m->notes_n * (sizeof(char) + (sizeof(uint8_t) * 2) + (sizeof(uint32_t) * 3)));
+        uint8_t ts_top = m->ts_top;
+        uint8_t ts_bottom = m->ts_bottom;
+        uint32_t notes_n = m->notes_n;
+
+        fwrite(measure_marker, sizeof(char), 4, f);
+        fwrite(&measure_length, sizeof(uint32_t), 1, f);
+        fwrite(&ts_top, sizeof(uint8_t), 1, f);
+        fwrite(&ts_bottom, sizeof(uint8_t), 1, f);
+        fwrite(&notes_n, sizeof(uint32_t), 1, f);
+        for (int j = 0; j < m->notes_n; ++j) {
+            struct Note *n = &m->notes[j];
+
+            uint32_t note_length = sizeof(char) + (sizeof(uint8_t) * 2) + (sizeof(uint32_t) * 3);
+            uint8_t string = n->string;
+            uint8_t fret = n->fret;
+            uint32_t offset = n->offset;
+            uint32_t length = n->length;
+
+            fwrite(note_marker, sizeof(char), 4, f);
+            fwrite(&note_length, sizeof(uint32_t), 1, f);
+            fwrite(&string, sizeof(uint8_t), 1, f);
+            fwrite(&fret, sizeof(uint8_t), 1, f);
+            fwrite(&offset, sizeof(uint32_t), 1, f);
+            fwrite(&length, sizeof(uint32_t), 1, f);
         }
     }
 
 
-    const char end_of_file[] = {0xFF, 0xFF};
-    fwrite(end_of_file, sizeof(char), 2, f);
+    uint32_t end_length = 0;
+    fwrite(end_marker, sizeof(char), 4, f);
+    fwrite(&end_length, sizeof(uint32_t), 1, f);
 
     fclose(f);
 }

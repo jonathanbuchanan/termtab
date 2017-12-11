@@ -2,6 +2,9 @@
 #define TAB_H
 
 #include <stddef.h>
+#include <stdio.h>
+
+struct Tab;
 
 enum Pitch {
     A,
@@ -51,6 +54,9 @@ int tones_distance_diatonic(struct Tone a, struct Tone b);
 
 // Returns a tone for another tone and a distance to add to it
 struct Tone tone_add_semitones(struct Tone t, int semitones);
+
+// Converts a note to a tone
+struct Tone note_to_tone(struct Tab *t, struct Note n);
 
 struct Tuning {
     struct Tone strings[6];
