@@ -1,4 +1,5 @@
 #include "export.h"
+#include "rhythm.h"
 #include <hpdf.h>
 #include <stdio.h>
 
@@ -14,9 +15,12 @@ struct Fonts {
     HPDF_Font normal;
     HPDF_Font bold;
     HPDF_Font italics;
-    HPDF_Font monospace;
+
+    HPDF_Font tablature;
+
     HPDF_Font music;
 };
+
 #define TITLE_SIZE 36
 #define AUTHOR_SIZE 14
 
@@ -39,6 +43,7 @@ void pdf_display_header(HPDF_Page page, struct Fonts f, struct Tab *t);
 void pdf_draw_staff(HPDF_Page page, struct Fonts f, int y);
 void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Tab *t, struct Measure *m, float x, float width, int staff_y);
 void pdf_draw_barline(HPDF_Page page, int x, int y1, int y2, float thickness);
+void pdf_draw_notegroup(HPDF_Page page, struct Fonts f, float x, float y, struct Tab *t, struct StemGroup group);
 
 float pdf_measure_ideal_width(struct Tab *t, struct Measure *m);
 
@@ -125,7 +130,7 @@ float pdf_measure_ideal_width(struct Tab *t, struct Measure *m) {
             ideal += n_preffered;
     }
     return ideal;*/
-    return SPACE_PER_TICK(t) * ((m->ts_top * t->ticks_per_quarter * 4) / m->ts_bottom);
+    return 12 + SPACE_PER_TICK(t) * ((m->ts_top * t->ticks_per_quarter * 4) / m->ts_bottom);
 }
 
 struct Fonts load_fonts(HPDF_Doc doc) {
@@ -134,7 +139,7 @@ struct Fonts load_fonts(HPDF_Doc doc) {
     f.normal = HPDF_GetFont(doc, "Times-Roman", "StandardEncoding");
     f.bold = HPDF_GetFont(doc, "Times-Bold", "StandardEncoding");
     f.italics = HPDF_GetFont(doc, "Times-Italic", "StandardEncoding");
-    f.monospace = HPDF_GetFont(doc, "Courier", "StandardEncoding");
+    f.tablature = HPDF_GetFont(doc, "Helvetica-Bold", "StandardEncoding");
     const char *music_font = HPDF_LoadTTFontFromFile(doc, "/Users/jonathan/Library/Fonts/Bravura.ttf", HPDF_TRUE);
     f.music = HPDF_GetFont(doc, music_font, "UTF-8");
 
@@ -236,6 +241,8 @@ void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Tab *t, struct Meas
     float scale = width / pdf_measure_ideal_width(t, m);
 
     float offset = 0;
+
+    struct RhythmData r = analyzeMeasure(m);
     for (int i = 0; i < m->notes_n; ++i) {
         struct Note *n = &m->notes[i];
         float allocated_width;
@@ -246,42 +253,30 @@ void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Tab *t, struct Meas
         else
             allocated_width = n_preffered * scale;
 
-        // Calculate the y-placement of the notehead. Move the notehead half a staff-space per semitone of difference from E3.
-        const struct Tone e3 = {E, Natural, 3};
+        float notehead_x = x + 12 + (SPACE_PER_TICK(t) * n->offset * scale);
 
-        struct Tone tone = tone_add_semitones(t->info.tuning.strings[n->string], n->fret);
-        float notehead_y = y + 50 + ((STAFF_SPACE / 2) * tones_distance_diatonic(e3, tone));
-
-        float notehead_x = x + (SPACE_PER_TICK(t) * n->offset * scale);
-
-        HPDF_Page_BeginText(page);
-        HPDF_Page_SetFontAndSize(page, f.music, STAFF_EM);
-        HPDF_Page_MoveTextPos(page, notehead_x, notehead_y);
-        HPDF_Page_ShowText(page, "\xEE\x82\xA4");
-        HPDF_Page_EndText(page);
-
-        // Stem goes up or down?
-        const struct Tone b3 = {B, Natural, 3};
-        if (tones_distance_diatonic(b3, tone) < 0) {
-            // Up
-            HPDF_Page_Rectangle(page, notehead_x + STEM_UP_BOTTOM_RIGHT_X - STEM_THICKNESS, notehead_y + STEM_UP_BOTTOM_RIGHT_Y, STEM_THICKNESS, 3.5 * STAFF_SPACE);
-            HPDF_Page_Fill(page);
-        } else {
-            // Down
-            HPDF_Page_Rectangle(page, notehead_x + STEM_DOWN_TOP_LEFT_X, notehead_y + STEM_DOWN_TOP_LEFT_Y, STEM_THICKNESS, -3.5 * STAFF_SPACE);
-            HPDF_Page_Fill(page);
-        }
+        // Draw a white rectangle to hide the staff line
+        HPDF_Page_SetRGBFill(page, 1, 1, 1);
+        HPDF_Page_Rectangle(page, notehead_x, y + (STAFF_SPACE * (5 - n->string)) - (STAFF_SPACE / 2), 10, STAFF_SPACE);
+        HPDF_Page_Fill(page);
+        HPDF_Page_SetRGBFill(page, 0, 0, 0);
 
         // Draw the fret number
         char fret[8];
         sprintf(fret, "%d", n->fret);
         HPDF_Page_BeginText(page);
-        HPDF_Page_SetFontAndSize(page, f.normal, STAFF_EM / 4);
-        HPDF_Page_MoveTextPos(page, notehead_x, y + (STAFF_SPACE * (5 - n->string)));
-        HPDF_Page_ShowText(page, fret);
+        HPDF_Page_SetFontAndSize(page, f.tablature, STAFF_EM / 4);
+        HPDF_Page_TextRect(page, notehead_x, y + (STAFF_SPACE * (5 - n->string)) + (STAFF_SPACE / 2), notehead_x + 10, y + (STAFF_SPACE * (5 - n->string)) - (STAFF_SPACE / 2),
+                fret, HPDF_TALIGN_CENTER, NULL);
         HPDF_Page_EndText(page);
 
         offset += allocated_width;
+    }
+
+    for (int i = 0; i < r.groups_n; ++i) {
+        struct StemGroup group = r.groups[i];
+
+        pdf_draw_notegroup(page, f, x + 12 + (SPACE_PER_TICK(t) * group.offset * scale), y + 50 + (STAFF_LINE / 2), t, group);
     }
 }
 
@@ -292,4 +287,113 @@ void pdf_draw_barline(HPDF_Page page, int x, int y1, int y2, float thickness) {
     HPDF_Page_MoveTo(page, x + (thickness / 2), y1);
     HPDF_Page_LineTo(page, x + (thickness / 2), y2);
     HPDF_Page_Stroke(page);
+}
+
+#define NOTEHEAD_WHOLE "\xEE\x82\xA2"
+#define NOTEHEAD_HALF  "\xEE\x82\xA3"
+#define NOTEHEAD_BLACK "\xEE\x82\xA4"
+
+void pdf_draw_notegroup(HPDF_Page page, struct Fonts f, float x, float y, struct Tab *t, struct StemGroup group) {
+    // Stem Direction (1 = up, 2 = down)
+    const struct Tone e3 = {E, Natural, 3};
+    const struct Tone b3 = {B, Natural, 3};
+    int stem_direction = 0;
+    int stem_length = 0; // Half staff-spaces
+    if (group.notes_n == 1) {
+        struct Tone tone = tone_add_semitones(t->info.tuning.strings[group.notes[0].note->string], group.notes[0].note->fret);
+        if (tones_distance_diatonic(b3, tone) < 0)
+            stem_direction = 1;
+        else
+            stem_direction = 2;
+
+        if (abs(tones_distance_diatonic(b3, tone)) < 8)
+            stem_length = 7;
+        else
+            stem_length = abs(tones_distance_diatonic(b3, tone));
+    } else if (group.notes_n > 1) {
+        // Get bottom-most and top-most note
+        struct Note *least = group_getLeast(t, &group);
+        struct Note *greatest = group_getGreatest(t, &group);
+
+        struct Tone least_t = tone_add_semitones(t->info.tuning.strings[least->string], least->fret);
+        struct Tone greatest_t = tone_add_semitones(t->info.tuning.strings[greatest->string], greatest->fret);
+
+        int distance_low = tones_distance_diatonic(b3, least_t);
+        int distance_high = tones_distance_diatonic(b3, greatest_t);
+
+        int greatest_distance;
+        if (abs(distance_low) > abs(distance_high))
+            greatest_distance = distance_low;
+        else if (abs(distance_low) < abs(distance_high))
+            greatest_distance = distance_high;
+
+        if (greatest_distance < 0)
+            stem_direction = 1;
+        else if (greatest_distance > 0)
+            stem_direction = 2;
+        else if (greatest_distance == 0) {
+            int majority = 0;
+            for (int i = 0; i < group.notes_n; ++i) {
+                struct Note *n = group.notes[i].note;
+                struct Tone tone = tone_add_semitones(t->info.tuning.strings[n->string], n->fret);
+                int distance = tones_distance_diatonic(b3, tone);
+                if (distance < 0)
+                    majority -= 1;
+                else if (distance > 0)
+                    majority += 1;
+            }
+
+            if (majority > 0)
+                stem_direction = 2;
+            else if (majority < 0)
+                stem_direction = 1;
+            else if (majority == 0)
+                stem_direction = 2;
+        }
+
+        if (abs(tones_distance_diatonic(least_t, greatest_t)) < 4)
+            stem_length = 7;
+        else
+            stem_length = abs(tones_distance_diatonic(least_t, greatest_t)) + 4;
+    }
+
+    // Find origin of stem and draw it
+    if (stem_direction == 1) {
+        struct Note *origin = group_getLeast(t, &group);
+        struct Tone tone = tone_add_semitones(t->info.tuning.strings[origin->string], origin->fret);
+        float origin_y = y + ((STAFF_SPACE / 2) * tones_distance_diatonic(e3, tone));
+        HPDF_Page_Rectangle(page, x + STEM_UP_BOTTOM_RIGHT_X - STEM_THICKNESS, origin_y + STEM_UP_BOTTOM_RIGHT_Y, STEM_THICKNESS, stem_length * 0.5 * STAFF_SPACE);
+        HPDF_Page_Fill(page);
+    } else if (stem_direction == 2) {
+        struct Note *origin = group_getGreatest(t, &group);
+        struct Tone tone = tone_add_semitones(t->info.tuning.strings[origin->string], origin->fret);
+        float origin_y = y + ((STAFF_SPACE / 2) * tones_distance_diatonic(e3, note_to_tone(t, *origin)));
+        HPDF_Page_Rectangle(page, x + STEM_DOWN_TOP_LEFT_X, origin_y + STEM_DOWN_TOP_LEFT_Y, STEM_THICKNESS, stem_length * -0.5 * STAFF_SPACE);
+        HPDF_Page_Fill(page);
+    }
+
+    // Draw the noteheads
+    for (int i = 0; i < group.notes_n; ++i) {
+        struct Note *n = group.notes[i].note;
+        struct Tone tone = tone_add_semitones(t->info.tuning.strings[n->string], n->fret);
+
+        const char *notehead;
+        // < half note => black notehead
+        if (n->length < t->ticks_per_quarter * 2)
+            notehead = NOTEHEAD_BLACK;
+        else if (n->length < t->ticks_per_quarter * 4)
+            notehead = NOTEHEAD_HALF;
+        else
+            notehead = NOTEHEAD_WHOLE;
+
+        float notehead_y = y + ((STAFF_SPACE / 2) * tones_distance_diatonic(e3, tone));
+
+        //float notehead_x = x + (SPACE_PER_TICK(t) * n->offset * scale);
+
+        HPDF_Page_BeginText(page);
+        HPDF_Page_SetFontAndSize(page, f.music, STAFF_EM);
+        HPDF_Page_MoveTextPos(page, x, notehead_y);
+        HPDF_Page_ShowText(page, notehead);
+        HPDF_Page_EndText(page);
+    }
 }
