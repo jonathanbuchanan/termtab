@@ -23,7 +23,7 @@ void draw_tab(struct State *);
 void draw_tab_note_prompt(struct State *, char *buffer);
 
 // Draws a measure over pre-existing bar lines. Returns the width of the measure.
-int draw_measure(struct Window *tab, int x, int y, struct Tab *t, struct Measure *measure);
+int draw_measure(struct Window *tab, int x, int y, struct Tab *t, int measure);
 int measure_width(struct Tab *tab, struct Measure *measure);
 void position_cursor(struct State *);
 

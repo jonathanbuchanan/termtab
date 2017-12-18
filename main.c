@@ -14,6 +14,7 @@ int main(int argc, char **argv) {
     bool running = true;
     do {
         draw(&s);
+        s.msg = "";
         switch (s.mode) {
         case Command:
             running = cmd_input(&s, next_char(s.window));

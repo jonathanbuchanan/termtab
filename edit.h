@@ -9,6 +9,8 @@ struct State;
 struct LayoutCache {
     int *line_numbers;
     int *offsets;
+
+    int top_row;
 };
 
 struct EditingState {

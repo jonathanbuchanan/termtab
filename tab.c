@@ -170,7 +170,7 @@ struct Tone note_to_tone(struct Tab *t, struct Note n) {
 struct Measure * new_measure(struct Tab *tab, int ts_top, int ts_bottom) {
     if (tab->measures_n == tab->measures_size) {
         tab->measures = realloc(tab->measures, sizeof(struct Measure) * tab->measures_size * 2);
-        tab->measures_size *= 2;
+        tab->measures_size = tab->measures_size * 2;
     }
     struct Measure *m = &tab->measures[tab->measures_n];
     ++tab->measures_n;
@@ -360,6 +360,7 @@ void process_measure(struct Measure *m, FILE *f) {
     m->ts_top = ts_top;
     m->ts_bottom = ts_bottom;
     m->notes_n = notes_n;
+    m->notes_size = notes_n;
 }
 
 void process_tab_data(struct Tab *t, FILE *f) {
@@ -386,39 +387,10 @@ void process_tab_data(struct Tab *t, FILE *f) {
             fseek(f, block_length, SEEK_CUR);
         }
     }
-    /*for (int i = 0; i < tab->measures_n; ++i) {
-        struct Measure *m = &tab->measures[i];
-
-        uint32_t measure_length;
-        uint8_t ts_top = m->ts_top;
-        uint8_t ts_bottom = m->ts_bottom;
-        uint32_t notes_n = m->notes_n;
-
-        fwrite(measure_marker, sizeof(char), 4, f);
-        fwrite(&measure_length, sizeof(uint32_t), 1, f);
-        fwrite(&ts_top, sizeof(uint8_t), 1, f);
-        fwrite(&ts_bottom, sizeof(uint8_t), 1, f);
-        fwrite(&notes_n, sizeof(uint32_t), 1, f);
-        for (int j = 0; j < m->notes_n; ++j) {
-            struct Note *n = &measure->notes[j];
-
-            uint32_t note_length;
-            uint8_t string = n->string;
-            uint8_t fret = n->fret;
-            uint32_t offset = n->offset;
-            uint32_t length = n->length;
-
-            fwrite(note_marker, sizeof(char), 4, f);
-            fwrite(&note_length, sizeof(uint32_t), 1, f);
-            fwrite(&string, sizeof(uint8_t), 1, f);
-            fwrite(&fret, sizeof(uint8_t), 1, f);
-            fwrite(&offset, sizeof(uint32_t), 1, f);
-            fwrite(&length, sizeof(uint32_t), 1, f);
-        }
-    }*/
 
     t->ticks_per_quarter = tickrate;
     t->measures_n = measures_n;
+    t->measures_size = measures_n;
 }
 
 void open_tab(struct Tab *t, const char *file) {

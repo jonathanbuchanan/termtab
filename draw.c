@@ -53,6 +53,7 @@ void init_status_window(struct Window *window) {
     start_color();
     init_pair(2, COLOR_BLACK, COLOR_WHITE);
     wbkgd(status, COLOR_PAIR(2));
+    wattron(status, COLOR_PAIR(1));
     wrefresh(status);
     window->status = status;
 }
@@ -94,19 +95,43 @@ void end_input() {
 void draw_status(struct State *state) {
     int x, y;
     getmaxyx(state->window->status, y, x);
-
     werase(state->window->status);
-    mvwprintw(state->window->status, 0, 0, state->msg);
+
     const char *mode;
+    char format[256];
+    memset(format, '\0', 256);
     switch (state->mode) {
-    case Command:
-        mode = "COMMAND";
-        break;
-    case Edit:
-        mode = "EDIT";
-        break;
+        case Command:
+            mode = "COMMAND";
+            break;
+        case Edit:
+            mode = "EDIT";
+
+            struct Measure *m = &state->tab->measures[state->edit.measure];
+            struct Note *n = measure_get_note(state->tab, state->edit.measure, state->edit.string, state->edit.x);
+
+            // Measure: [m]
+            if (n == NULL)
+                snprintf(format, 256, "Measure: [%d] | Time Signature: [%d/%d]", state->edit.measure, m->ts_top, m->ts_bottom);
+            else {
+                struct Tone t = tone_add_semitones(state->tab->info.tuning.strings[n->string], n->fret); 
+                char note[8];
+                tone_to_string(t, note, 8);
+                snprintf(format, 256, "Measure: [%d] | Time Signature: [%d/%d] | Note: [%s]", state->edit.measure, m->ts_top, m->ts_bottom, note);
+            }
+            break;
+    }
+
+
+
+    if (strlen(state->msg) != 0)
+        mvwprintw(state->window->status, 0, 0, state->msg);
+    else {
+        mvwprintw(state->window->status, 0, 0, format);
     }
     mvwprintw(state->window->status, 0, x - strlen(mode), mode);
+
+
     wrefresh(state->window->status);
 }
 
@@ -127,6 +152,8 @@ void draw_cmd_prompt(struct State *state, char *buffer) {
 void draw_tab(struct State *state) {
     struct Window *window = state->window;
     struct Tab *tab = state->tab;
+
+    werase(window->status);
 
     realloc_cache(&state->edit.layout, tab->measures_n);
 
@@ -153,20 +180,40 @@ void draw_tab(struct State *state) {
         } else {
             // This measure can't fit, make a new line
             ++lines;
-            used_width = 0;
+            used_width = measure_width(tab, &state->tab->measures[i]);
             line_number[i] = lines - 1;
             state->edit.layout.line_numbers[i] = lines - 1;
         }
     }
 
+    // The measure being edited should be in the middle of the three lines
+    int top_line = line_number[state->edit.measure] - 1;
+    if (line_number[state->edit.measure] == lines - 1 && lines > 2)
+        top_line = lines - 3;
+    if (line_number[state->edit.measure] == 0)
+        top_line = 0;
+
+    state->edit.layout.top_row = top_line;
+
+    int displayed_lines = 3;
+    if (lines < 3)
+        displayed_lines = lines;
+    
     int m = 0;
+    while (1) {
+        if (line_number[m] == top_line)
+            break;
+        ++m;
+    }
+
     int offset = 8;
-    for (int i = 0; i < lines; ++i) {
+    for (int i = 0; i < displayed_lines; ++i) {
+        int line = i + top_line;
         int y = 7 + (14 * i);
 
         // Draw tuning and lines
         for (int i = 0; i < 6; ++i) {
-            int y_line = y + (2 * i);
+            int y_line = y + 1 + (2 * i);
             char buff[5];
             tone_to_string(tab->info.tuning.strings[i], buff, 5);
             mvwprintw(window->tab, y_line, 0, "%d", i);
@@ -175,12 +222,12 @@ void draw_tab(struct State *state) {
         }
 
         // Draw seperating line
-        mvwvline(window->tab, y, 7, '|', 11);
+        mvwvline(window->tab, y + 1, 7, '|', 11);
         mvwhline(window->tab, y + 12, 0, '_', width);
 
-        while (line_number[m] == i) {
+        while (line_number[m] == line && m < state->tab->measures_n) {
             state->edit.layout.offsets[m] = offset;
-            offset += draw_measure(window, offset, y, tab, &state->tab->measures[m]);
+            offset += draw_measure(window, offset, y, tab, m);
             ++m;
         }
 
@@ -202,12 +249,14 @@ void draw_tab_note_prompt(struct State *state, char *buffer) {
 }
 
 #define TICKS_PER_COLUMN 2
-int draw_measure(struct Window *w, int x, int y, struct Tab *t, struct Measure *m) {
+int draw_measure(struct Window *w, int x, int y, struct Tab *t, int measure) {
+    struct Measure *m = &t->measures[measure];
     int width = (m->ts_top * t->ticks_per_quarter * 4) / (m->ts_bottom * TICKS_PER_COLUMN);
-    mvwvline(w->tab, y, x + width, '|', 11);
+    mvwvline(w->tab, y + 1, x + width, '|', 11);
+    mvwprintw(w->tab, y, x, "%d", measure);
     for (int i = 0; i < m->notes_n; ++i) {
         struct Note *n = &m->notes[i];
-        mvwprintw(w->tab, y + (2 * n->string), x + (n->offset / TICKS_PER_COLUMN), "%d", n->fret);
+        mvwprintw(w->tab, y + 1 + (2 * n->string), x + (n->offset / TICKS_PER_COLUMN), "%d", n->fret);
     }
     return width + 1;
 }
@@ -223,11 +272,11 @@ void position_cursor(struct State *state) {
     struct Window *window = state->window;
     int w = state->edit.cursor_width / TICKS_PER_COLUMN;
 
+    int line = state->edit.layout.line_numbers[state->edit.measure] - state->edit.layout.top_row;
+
     // Find x and y position
     int x = state->edit.layout.offsets[state->edit.measure];
-    int y = 7 + (14 * state->edit.layout.line_numbers[state->edit.measure]) + (2 * state->edit.string);
-
-
+    int y = 8 + (14 * line) + (2 * state->edit.string);
 
     // Offset within measure
     int offset_x = state->edit.x / TICKS_PER_COLUMN;
