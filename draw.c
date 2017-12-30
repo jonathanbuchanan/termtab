@@ -153,7 +153,7 @@ void draw_tab(struct State *state) {
     struct Window *window = state->window;
     struct Tab *tab = state->tab;
 
-    werase(window->status);
+    werase(window->tab);
 
     realloc_cache(&state->edit.layout, tab->measures_n);
 

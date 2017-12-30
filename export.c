@@ -2,6 +2,7 @@
 #include "rhythm.h"
 #include <hpdf.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 void generate_text_file(struct Tab *t, const char *file) {
 
@@ -19,6 +20,25 @@ struct Fonts {
     HPDF_Font tablature;
 
     HPDF_Font music;
+};
+
+enum StemDirection {
+    Up,
+    Down
+};
+
+struct StemInfo {
+    enum StemDirection direction;
+    int length;
+    bool flag;
+};
+
+struct StemGroupDrawingData {
+    int x;
+
+    // The location of the tip of the stem
+    int stem_x;
+    int stem_y;
 };
 
 #define TITLE_SIZE 36
@@ -43,7 +63,9 @@ void pdf_display_header(HPDF_Page page, struct Fonts f, struct Tab *t);
 void pdf_draw_staff(HPDF_Page page, struct Fonts f, int y);
 void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Tab *t, struct Measure *m, float x, float width, int staff_y);
 void pdf_draw_barline(HPDF_Page page, int x, int y1, int y2, float thickness);
-void pdf_draw_notegroup(HPDF_Page page, struct Fonts f, float x, float y, struct Tab *t, struct StemGroup group);
+struct StemGroupDrawingData pdf_draw_notegroup(HPDF_Page page, struct Fonts f, float x, float y, struct Tab *t, struct StemGroup group, struct StemInfo info);
+void pdf_draw_beam(HPDF_Page page, float x1, float y1, float x2, float y2, enum StemDirection direction);
+void evaluate_stems(struct Tab *t, struct RhythmData r, struct StemInfo *data);
 
 float pdf_measure_ideal_width(struct Tab *t, struct Measure *m);
 
@@ -242,7 +264,7 @@ void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Tab *t, struct Meas
 
     float offset = 0;
 
-    struct RhythmData r = analyzeMeasure(m);
+    struct RhythmData r = analyzeMeasure(t, m);
     for (int i = 0; i < m->notes_n; ++i) {
         struct Note *n = &m->notes[i];
         float allocated_width;
@@ -273,10 +295,36 @@ void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Tab *t, struct Meas
         offset += allocated_width;
     }
 
+    struct StemInfo *stem_data = malloc(r.groups_n * sizeof(struct StemInfo));
+    evaluate_stems(t, r, stem_data);
+
+    struct StemGroupDrawingData drawing_data[r.groups_n];
+
     for (int i = 0; i < r.groups_n; ++i) {
         struct StemGroup group = r.groups[i];
 
-        pdf_draw_notegroup(page, f, x + 12 + (SPACE_PER_TICK(t) * group.offset * scale), y + 50 + (STAFF_LINE / 2), t, group);
+        drawing_data[i] = pdf_draw_notegroup(page, f, x + 12 + (SPACE_PER_TICK(t) * group.offset * scale), y + 50 + (STAFF_LINE / 2), t, group, stem_data[i]);
+    }
+
+    for (int i = 0; i < r.beams_n; ++i ) {
+        // Draw that beam
+        struct BeamGroup *beam = &r.beams[i];
+
+        struct StemGroup *first = beam->stems[0];
+        struct StemGroup *last = beam->stems[beam->stems_n - 1];
+
+        int i_first = 0;
+        while (&r.groups[i_first] != first)
+            ++i_first;
+
+        int i_last = 0;
+        while (&r.groups[i_last] != last)
+            ++i_last;
+
+        struct StemGroupDrawingData data_first = drawing_data[i_first];
+        struct StemGroupDrawingData data_last = drawing_data[i_last];
+
+        pdf_draw_beam(page, data_first.stem_x, data_first.stem_y, data_last.stem_x, data_last.stem_y, stem_data[i_first].direction);
     }
 }
 
@@ -284,8 +332,8 @@ void pdf_draw_barline(HPDF_Page page, int x, int y1, int y2, float thickness) {
     HPDF_Page_SetLineWidth(page, thickness);
     HPDF_Page_SetLineCap(page, HPDF_BUTT_END);
 
-    HPDF_Page_MoveTo(page, x + (thickness / 2), y1);
-    HPDF_Page_LineTo(page, x + (thickness / 2), y2);
+    HPDF_Page_MoveTo(page, x - (thickness / 2), y1);
+    HPDF_Page_LineTo(page, x - (thickness / 2), y2);
     HPDF_Page_Stroke(page);
 }
 
@@ -293,83 +341,66 @@ void pdf_draw_barline(HPDF_Page page, int x, int y1, int y2, float thickness) {
 #define NOTEHEAD_HALF  "\xEE\x82\xA3"
 #define NOTEHEAD_BLACK "\xEE\x82\xA4"
 
-void pdf_draw_notegroup(HPDF_Page page, struct Fonts f, float x, float y, struct Tab *t, struct StemGroup group) {
+#define FLAG_8TH_UP    "\xEE\x89\x80"
+#define FLAG_8TH_DOWN  "\xEE\x89\x81"
+#define FLAG_16TH_UP   "\xEE\x89\x82"
+#define FLAG_16TH_DOWN "\xEE\x89\x83"
+
+struct StemGroupDrawingData pdf_draw_notegroup(HPDF_Page page, struct Fonts f, float x, float y, struct Tab *t, struct StemGroup group, struct StemInfo stem_data) {
     // Stem Direction (1 = up, 2 = down)
     const struct Tone e3 = {E, Natural, 3};
-    const struct Tone b3 = {B, Natural, 3};
-    int stem_direction = 0;
-    int stem_length = 0; // Half staff-spaces
-    if (group.notes_n == 1) {
-        struct Tone tone = tone_add_semitones(t->info.tuning.strings[group.notes[0].note->string], group.notes[0].note->fret);
-        if (tones_distance_diatonic(b3, tone) < 0)
-            stem_direction = 1;
-        else
-            stem_direction = 2;
+    const int eighth = t->ticks_per_quarter / 2;
+    const int sixteenth = t->ticks_per_quarter / 4;
 
-        if (abs(tones_distance_diatonic(b3, tone)) < 8)
-            stem_length = 7;
-        else
-            stem_length = abs(tones_distance_diatonic(b3, tone));
-    } else if (group.notes_n > 1) {
-        // Get bottom-most and top-most note
-        struct Note *least = group_getLeast(t, &group);
-        struct Note *greatest = group_getGreatest(t, &group);
+    const char *flag;
 
-        struct Tone least_t = tone_add_semitones(t->info.tuning.strings[least->string], least->fret);
-        struct Tone greatest_t = tone_add_semitones(t->info.tuning.strings[greatest->string], greatest->fret);
-
-        int distance_low = tones_distance_diatonic(b3, least_t);
-        int distance_high = tones_distance_diatonic(b3, greatest_t);
-
-        int greatest_distance;
-        if (abs(distance_low) > abs(distance_high))
-            greatest_distance = distance_low;
-        else if (abs(distance_low) < abs(distance_high))
-            greatest_distance = distance_high;
-
-        if (greatest_distance < 0)
-            stem_direction = 1;
-        else if (greatest_distance > 0)
-            stem_direction = 2;
-        else if (greatest_distance == 0) {
-            int majority = 0;
-            for (int i = 0; i < group.notes_n; ++i) {
-                struct Note *n = group.notes[i].note;
-                struct Tone tone = tone_add_semitones(t->info.tuning.strings[n->string], n->fret);
-                int distance = tones_distance_diatonic(b3, tone);
-                if (distance < 0)
-                    majority -= 1;
-                else if (distance > 0)
-                    majority += 1;
-            }
-
-            if (majority > 0)
-                stem_direction = 2;
-            else if (majority < 0)
-                stem_direction = 1;
-            else if (majority == 0)
-                stem_direction = 2;
-        }
-
-        if (abs(tones_distance_diatonic(least_t, greatest_t)) < 4)
-            stem_length = 7;
-        else
-            stem_length = abs(tones_distance_diatonic(least_t, greatest_t)) + 4;
-    }
+    struct StemGroupDrawingData data = {x, 0, 0};
 
     // Find origin of stem and draw it
-    if (stem_direction == 1) {
+    if (stem_data.direction == Up) {
         struct Note *origin = group_getLeast(t, &group);
         struct Tone tone = tone_add_semitones(t->info.tuning.strings[origin->string], origin->fret);
         float origin_y = y + ((STAFF_SPACE / 2) * tones_distance_diatonic(e3, tone));
-        HPDF_Page_Rectangle(page, x + STEM_UP_BOTTOM_RIGHT_X - STEM_THICKNESS, origin_y + STEM_UP_BOTTOM_RIGHT_Y, STEM_THICKNESS, stem_length * 0.5 * STAFF_SPACE);
+        HPDF_Page_Rectangle(page, x + STEM_UP_BOTTOM_RIGHT_X - STEM_THICKNESS, origin_y + STEM_UP_BOTTOM_RIGHT_Y, STEM_THICKNESS, stem_data.length * 0.5 * STAFF_SPACE);
         HPDF_Page_Fill(page);
-    } else if (stem_direction == 2) {
+
+        data.stem_x = x + STEM_UP_BOTTOM_RIGHT_X - STEM_THICKNESS;
+        data.stem_y = origin_y + STEM_UP_BOTTOM_RIGHT_Y + (stem_data.length * 0.5 * STAFF_SPACE);
+
+        if (stem_data.flag) {
+            if (origin->length == eighth)
+                flag = FLAG_8TH_UP;
+            else if (origin->length == sixteenth)
+                flag = FLAG_16TH_UP;
+
+            HPDF_Page_BeginText(page);
+            HPDF_Page_SetFontAndSize(page, f.music, STAFF_EM);
+            HPDF_Page_MoveTextPos(page, x + STEM_UP_BOTTOM_RIGHT_X - STEM_THICKNESS, origin_y + STEM_UP_BOTTOM_RIGHT_Y + (stem_data.length * 0.5 * STAFF_SPACE));
+            HPDF_Page_ShowText(page, flag);
+            HPDF_Page_EndText(page);
+        }
+    } else if (stem_data.direction == Down) {
         struct Note *origin = group_getGreatest(t, &group);
         struct Tone tone = tone_add_semitones(t->info.tuning.strings[origin->string], origin->fret);
         float origin_y = y + ((STAFF_SPACE / 2) * tones_distance_diatonic(e3, note_to_tone(t, *origin)));
-        HPDF_Page_Rectangle(page, x + STEM_DOWN_TOP_LEFT_X, origin_y + STEM_DOWN_TOP_LEFT_Y, STEM_THICKNESS, stem_length * -0.5 * STAFF_SPACE);
+        HPDF_Page_Rectangle(page, x + STEM_DOWN_TOP_LEFT_X, origin_y + STEM_DOWN_TOP_LEFT_Y, STEM_THICKNESS, stem_data.length * -0.5 * STAFF_SPACE);
         HPDF_Page_Fill(page);
+
+        data.stem_x = x + STEM_DOWN_TOP_LEFT_X + STEM_THICKNESS;
+        data.stem_y = origin_y + STEM_DOWN_TOP_LEFT_Y + (stem_data.length * -0.5 * STAFF_SPACE);
+
+        if (stem_data.flag) {
+            if (origin->length == eighth)
+                flag = FLAG_8TH_DOWN;
+            else if (origin->length == sixteenth)
+                flag = FLAG_16TH_DOWN;
+
+            HPDF_Page_BeginText(page);
+            HPDF_Page_SetFontAndSize(page, f.music, STAFF_EM);
+            HPDF_Page_MoveTextPos(page, x + STEM_DOWN_TOP_LEFT_X, origin_y + STEM_DOWN_TOP_LEFT_Y - (stem_data.length * 0.5 * STAFF_SPACE));
+            HPDF_Page_ShowText(page, flag);
+            HPDF_Page_EndText(page);
+        }
     }
 
     // Draw the noteheads
@@ -395,5 +426,201 @@ void pdf_draw_notegroup(HPDF_Page page, struct Fonts f, float x, float y, struct
         HPDF_Page_MoveTextPos(page, x, notehead_y);
         HPDF_Page_ShowText(page, notehead);
         HPDF_Page_EndText(page);
+    }
+
+    return data;
+}
+
+#define BEAM_THICKNESS (0.5 * STAFF_SPACE) 
+void pdf_draw_beam(HPDF_Page page, float x1, float y1, float x2, float y2, enum StemDirection direction) {
+    HPDF_Page_MoveTo(page, x1, y1);
+    HPDF_Page_LineTo(page, x2, y2);
+
+    switch (direction) {
+    case Up:
+        // Up (beam is below the tips of the stems)
+        HPDF_Page_LineTo(page, x2, y2 - BEAM_THICKNESS);
+        HPDF_Page_LineTo(page, x1, y1 - BEAM_THICKNESS);
+        break;
+    case Down:
+        // Down (beam is above the tips of the stems)
+        HPDF_Page_LineTo(page, x2, y2 + BEAM_THICKNESS);
+        HPDF_Page_LineTo(page, x1, y1 + BEAM_THICKNESS);
+        break;
+    }
+
+    HPDF_Page_Fill(page);
+}
+
+void evaluate_stems(struct Tab *t, struct RhythmData r, struct StemInfo *data) {
+    const struct Tone b3 = {B, Natural, 3};
+
+    // Go through beams first
+    for (int b = 0; b < r.beams_n; ++b) {
+        struct BeamGroup *beam = &r.beams[b];
+        enum StemDirection stem_direction;
+        if (beam->stems_n == 2) {
+            struct Note *least_1 = group_getLeast(t, beam->stems[0]);
+            struct Note *least_2 = group_getLeast(t, beam->stems[1]);
+
+            struct Tone least_t1 = note_to_tone(t, *least_1);
+            struct Tone least_t2 = note_to_tone(t, *least_2);
+
+            struct Note *greatest_1 = group_getGreatest(t, beam->stems[0]);
+            struct Note *greatest_2 = group_getGreatest(t, beam->stems[1]);
+
+            struct Tone greatest_t1 = note_to_tone(t, *greatest_1);
+            struct Tone greatest_t2 = note_to_tone(t, *greatest_2);
+
+            int distance_low_1 = tones_distance_diatonic(b3, least_t1);
+            int distance_low_2 = tones_distance_diatonic(b3, least_t2);
+            int distance_high_1 = tones_distance_diatonic(b3, greatest_t1);
+            int distance_high_2 = tones_distance_diatonic(b3, greatest_t2);
+
+            int distance_low;
+            int distance_high;
+
+            if (distance_low_1 < distance_low_2)
+                distance_low = distance_low_1;
+            else if (distance_low_2 < distance_low_1)
+                distance_low = distance_low_2;
+            else
+                distance_low = distance_low_1;
+
+            if (distance_high_1 > distance_high_2)
+                distance_high = distance_high_1;
+            else if (distance_high_2 > distance_high_1)
+                distance_high = distance_high_2;
+            else
+                distance_high = distance_high_1;
+
+            if (abs(distance_low) > abs(distance_high))
+                stem_direction = Up;
+            else if (abs(distance_high) > abs(distance_low))
+                stem_direction = Down;
+            else
+                stem_direction = Down;
+        } else if (beam->stems_n > 2) {
+            int majority = 0;
+            for (int i = 0; i < beam->stems_n; ++i) {
+                for (int j = 0; j < beam->stems[i]->notes_n; ++j) {
+                    struct Note *n = beam->stems[i]->notes[j].note;
+                    struct Tone tone = tone_add_semitones(t->info.tuning.strings[n->string], n->fret);
+                    int distance = tones_distance_diatonic(b3, tone);
+                    if (distance < 0)
+                        majority -= 1;
+                    else if (distance > 0)
+                        majority += 1;
+                }
+            }
+
+            if (majority > 0)
+                stem_direction = Down;
+            else if (majority < 0)
+                stem_direction = Up;
+            else if (majority == 0)
+                stem_direction = Down;
+        }
+
+        // Assign the direction to each note in the beam
+        for (int i = 0; i < beam->stems_n; ++i) {
+            //beam->stems[i]
+            int index = 0;
+            while (&r.groups[index] != beam->stems[i])
+                ++index;
+
+            data[index].direction = stem_direction;
+        }
+    }
+
+    // Give the group a stem if it isn't part of a beam
+    for (int i = 0; i < r.groups_n; ++i) {
+        if (r.groups[i].beam == NULL) {
+            struct StemGroup group = r.groups[i];
+
+            // Individual stems have flags
+            data[i].flag = true;
+
+            // Find the direction and length of the individual stem
+            enum StemDirection stem_direction;
+            int stem_length = 0;
+            if (group.notes_n == 1) {
+                struct Tone tone = tone_add_semitones(t->info.tuning.strings[group.notes[0].note->string], group.notes[0].note->fret);
+                if (tones_distance_diatonic(b3, tone) < 0)
+                    stem_direction = Up;
+                else
+                    stem_direction = Down;
+            } else if (group.notes_n > 1) {
+                // Get bottom-most and top-most note
+                struct Note *least = group_getLeast(t, &group);
+                struct Note *greatest = group_getGreatest(t, &group);
+
+                struct Tone least_t = tone_add_semitones(t->info.tuning.strings[least->string], least->fret);
+                struct Tone greatest_t = tone_add_semitones(t->info.tuning.strings[greatest->string], greatest->fret);
+
+                int distance_low = tones_distance_diatonic(b3, least_t);
+                int distance_high = tones_distance_diatonic(b3, greatest_t);
+
+                int greatest_distance;
+                if (abs(distance_low) > abs(distance_high))
+                    greatest_distance = distance_low;
+                else if (abs(distance_low) < abs(distance_high))
+                    greatest_distance = distance_high;
+
+                if (greatest_distance < 0)
+                    stem_direction = Up;
+                else if (greatest_distance > 0)
+                    stem_direction = Down;
+                else if (greatest_distance == 0) {
+                    int majority = 0;
+                    for (int i = 0; i < group.notes_n; ++i) {
+                        struct Note *n = group.notes[i].note;
+                        struct Tone tone = tone_add_semitones(t->info.tuning.strings[n->string], n->fret);
+                        int distance = tones_distance_diatonic(b3, tone);
+                        if (distance < 0)
+                            majority -= 1;
+                        else if (distance > 0)
+                            majority += 1;
+                    }
+
+                    if (majority > 0)
+                        stem_direction = Down;
+                    else if (majority < 0)
+                        stem_direction = Up;
+                    else if (majority == 0)
+                        stem_direction = Down;
+                }
+
+                
+            }
+
+            data[i].direction = stem_direction;
+        } else
+            data[i].flag = false;
+
+        // Calculate stem length
+        struct StemGroup group = r.groups[i];
+        int stem_length = 0;
+        if (group.notes_n == 1) {
+            struct Tone tone = tone_add_semitones(t->info.tuning.strings[group.notes[0].note->string], group.notes[0].note->fret);
+            if (abs(tones_distance_diatonic(b3, tone)) < 8)
+                stem_length = 7;
+            else
+                stem_length = abs(tones_distance_diatonic(b3, tone));
+        } else {
+            // Get bottom-most and top-most note
+            struct Note *least = group_getLeast(t, &group);
+            struct Note *greatest = group_getGreatest(t, &group);
+
+            struct Tone least_t = tone_add_semitones(t->info.tuning.strings[least->string], least->fret);
+            struct Tone greatest_t = tone_add_semitones(t->info.tuning.strings[greatest->string], greatest->fret);
+
+            if (abs(tones_distance_diatonic(least_t, greatest_t)) < 4)
+                stem_length = 7;
+            else
+                stem_length = abs(tones_distance_diatonic(least_t, greatest_t)) + 4;
+        }
+
+        data[i].length = stem_length;
     }
 }
