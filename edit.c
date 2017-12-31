@@ -2,6 +2,9 @@
 #include "cmd.h"
 #include "draw.h"
 
+#include <stdlib.h>
+#include <errno.h>
+
 bool edit_input(struct State *s, int c) {
     switch (c) {
     case 27:
@@ -24,7 +27,7 @@ bool edit_input(struct State *s, int c) {
             s->edit.x += s->edit.cursor_width;
         break;
     case 'a':
-        new_measure(s->tab, 4, 4);
+        new_measure(s->tab);
         break;
     case 'n':
         if (s->edit.measure > 0)
@@ -50,6 +53,10 @@ bool edit_input(struct State *s, int c) {
     case 'x':
         remove_note(s);
         break;
+    // Change the key
+    case 'y':
+        change_key(s);
+        break;
     default:
         break;
     }
@@ -67,4 +74,25 @@ void add_note(struct State *s) {
     draw_tab_note_prompt(s, buff);
     struct Note n = string_to_note(buff, s->edit.string, s->edit.x, s->edit.cursor_width);
     measure_new_note(s->tab, s->edit.measure, n);
+}
+
+void change_key(struct State *s) {
+    char buff_key_center[256], buff_tonality[256];
+    draw_tab_key_prompt(s, buff_key_center, buff_tonality);
+    struct Tone t = string_to_tone(buff_key_center, false);
+    enum Tonality tonality;
+
+    int tonality_n = strtol(buff_tonality, NULL, 10);
+    if (errno == ERANGE || errno == EINVAL) {
+        // Uh oh
+    }
+    if (tonality_n == 1)
+        tonality = Major;
+    else if (tonality_n == 2)
+        tonality = Minor;
+    else {
+        // Uh oh
+    }
+
+    s->tab->measures[s->edit.measure].key = (struct Key){t, tonality};
 }

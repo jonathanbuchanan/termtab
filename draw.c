@@ -110,14 +110,17 @@ void draw_status(struct State *state) {
             struct Measure *m = &state->tab->measures[state->edit.measure];
             struct Note *n = measure_get_note(state->tab, state->edit.measure, state->edit.string, state->edit.x);
 
+            char key[10];
+            key_to_string(m->key, key, 10);
+
             // Measure: [m]
             if (n == NULL)
-                snprintf(format, 256, "Measure: [%d] | Time Signature: [%d/%d]", state->edit.measure, m->ts_top, m->ts_bottom);
+                snprintf(format, 256, "Measure: [%d] | Time Signature: [%d/%d] | Key: [%s]", state->edit.measure, m->ts_top, m->ts_bottom, key);
             else {
                 struct Tone t = tone_add_semitones(state->tab->info.tuning.strings[n->string], n->fret); 
                 char note[8];
-                tone_to_string(t, note, 8);
-                snprintf(format, 256, "Measure: [%d] | Time Signature: [%d/%d] | Note: [%s]", state->edit.measure, m->ts_top, m->ts_bottom, note);
+                tone_to_string(t, true, note, 8);
+                snprintf(format, 256, "Measure: [%d] | Time Signature: [%d/%d] | Key: [%s] | Note: [%s]", state->edit.measure, m->ts_top, m->ts_bottom, key, note);
             }
             break;
     }
@@ -215,7 +218,7 @@ void draw_tab(struct State *state) {
         for (int i = 0; i < 6; ++i) {
             int y_line = y + 1 + (2 * i);
             char buff[5];
-            tone_to_string(tab->info.tuning.strings[i], buff, 5);
+            tone_to_string(tab->info.tuning.strings[i], true, buff, 5);
             mvwprintw(window->tab, y_line, 0, "%d", i);
             mvwprintw(window->tab, y_line, 2, buff);
             mvwhline(window->tab, y_line, 8, '-', width);
@@ -238,13 +241,34 @@ void draw_tab(struct State *state) {
 }
 
 void draw_tab_note_prompt(struct State *state, char *buffer) {
-    mvwprintw(state->window->tab, 5, 0, "Enter a note: ");
+    mvwprintw(state->window->tab, 3, 0, "Enter a note: ");
     wrefresh(state->window->tab);
     begin_input();
-    mvwgetstr(state->window->tab, 5, 14, buffer);
+    mvwgetstr(state->window->tab, 3, 14, buffer);
     end_input();
-    wmove(state->window->tab, 5, 0);
+    wmove(state->window->tab, 3, 0);
     wclrtoeol(state->window->tab);
+    wrefresh(state->window->tab);
+}
+
+void draw_tab_key_prompt(struct State *state, char *buffer_key_center, char *buffer_tonality) {
+    mvwprintw(state->window->tab, 3, 0, "Enter the key center: ");
+    wrefresh(state->window->tab);
+    begin_input();
+    mvwgetstr(state->window->tab, 3, 22, buffer_key_center);
+    end_input();
+
+    mvwprintw(state->window->tab, 4, 0, "Choose the tonality (1=major, 2=minor): ");
+    wrefresh(state->window->tab);
+    begin_input();
+    mvwgetstr(state->window->tab, 4, 40, buffer_tonality);
+    end_input();
+
+    wmove(state->window->tab, 3, 0);
+    wclrtoeol(state->window->tab);
+    wmove(state->window->tab, 4, 0);
+    wclrtoeol(state->window->tab);
+
     wrefresh(state->window->tab);
 }
 

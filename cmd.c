@@ -276,7 +276,7 @@ void author(struct State *s, char *author) {
 }
 
 void set_string(struct State *s, int string, char *tone) {
-    struct Tone t = string_to_tone(tone);
+    struct Tone t = string_to_tone(tone, true);
     if (string < 6)
         s->tab->info.tuning.strings[string] = t;
     else {

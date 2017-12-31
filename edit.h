@@ -30,5 +30,6 @@ bool edit_input(struct State *s, int c);
 
 void remove_note(struct State *s);
 void add_note(struct State *s);
+void change_key(struct State *s);
 
 #endif

@@ -134,7 +134,7 @@ void generate_pdf(struct Tab *t, const char *file) {
            x += calculated_width[m];
            ++m;
         }
-        x = MARGIN_LEFT + 100;
+        x = MARGIN_LEFT + 72;
     }
 
     HPDF_SaveToFile(pdf, file);

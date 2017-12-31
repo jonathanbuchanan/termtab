@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 struct Tab;
 
@@ -37,11 +38,21 @@ struct Note {
     int length;
 };
 
+enum Tonality {
+    Major,
+    Minor
+};
+
+struct Key {
+    struct Tone key_center; // Ignore the octave for this purpose
+    enum Tonality tonality;
+};
+
 // Returns a string for any given tone
-void tone_to_string(struct Tone tone, char *buffer, size_t n);
+void tone_to_string(struct Tone tone, bool show_octave, char *buffer, size_t n);
 
 // Returns a tone for a string
-struct Tone string_to_tone(const char *str);
+struct Tone string_to_tone(const char *str, bool octave);
 
 // Returns a note for a string
 struct Note string_to_note(const char *str, int string, int offset, int length);
@@ -58,6 +69,9 @@ struct Tone tone_add_semitones(struct Tone t, int semitones);
 // Converts a note to a tone
 struct Tone note_to_tone(struct Tab *t, struct Note n);
 
+// Returns a string for a key (suggested buffer size of 10 or more)
+void key_to_string(struct Key key, char *buffer, size_t n);
+
 struct Tuning {
     struct Tone strings[6];
 };
@@ -71,6 +85,8 @@ struct TabInfo {
 
 struct Measure {
     int ts_top, ts_bottom;
+    struct Key key;
+
     struct Note *notes;
     size_t notes_n;
     size_t notes_size;
@@ -86,7 +102,8 @@ struct Tab {
 };
 
 // Creates a blank measure with no notes, doubling the array if necessary
-struct Measure * new_measure(struct Tab *tab, int ts_top, int ts_bottom);
+// The new measure will "inherit" its time signature and key from the preceding measure
+struct Measure * new_measure(struct Tab *tab);
 
 // Returns the number of ticks in a measure
 int measure_get_ticks(struct Tab *tab, int measure);

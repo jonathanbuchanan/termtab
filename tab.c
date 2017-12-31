@@ -7,7 +7,7 @@
 #include <errno.h>
 #include <stdbool.h>
 
-void tone_to_string(struct Tone tone, char *buffer, size_t n) {
+void tone_to_string(struct Tone tone, bool show_octave, char *buffer, size_t n) {
     char *note;
     switch (tone.note) {
         case A: note = "A"; break;
@@ -28,11 +28,15 @@ void tone_to_string(struct Tone tone, char *buffer, size_t n) {
         case DoubleSharp: shift = "##"; break;
     }
 
-    snprintf(buffer, n, "%s%s%d", note, shift, tone.octave);
+    if (show_octave)
+        snprintf(buffer, n, "%s%s%d", note, shift, tone.octave);
+    else
+        snprintf(buffer, n, "%s%s", note, shift);
 }
 
-struct Tone string_to_tone(const char *str) {
+struct Tone string_to_tone(const char *str, bool octave) {
     struct Tone t;
+    t.shift = Natural;
     const char *i = str;
 
     // Note
@@ -63,11 +67,11 @@ struct Tone string_to_tone(const char *str) {
         } else if (strncmp(i, "b", 1) == 0) {
             t.shift = Flat;
             ++i;
-        } else if (strncmp(i, "#", 1) == 0) {
-            t.shift = Sharp;
-            ++i;
-        } else if (strncmp(i, "##", 2) == 0) {
+        } else if (strncmp(i, "##", 1) == 0) {
             t.shift = DoubleSharp;
+            ++i;
+        } else if (strncmp(i, "#", 2) == 0) {
+            t.shift = Sharp;
             i += 2;
         }
     } else {
@@ -75,9 +79,13 @@ struct Tone string_to_tone(const char *str) {
     }
 
     // Octave
-    t.octave = strtol(i, NULL, 10);
-    if (errno == ERANGE || errno == EINVAL) {
-        // Uh oh
+    if (octave) {
+        t.octave = strtol(i, NULL, 10);
+        if (errno == ERANGE || errno == EINVAL) {
+            // Uh oh
+        }
+    } else {
+        t.octave = 0;
     }
 
     return t;
@@ -167,14 +175,40 @@ struct Tone note_to_tone(struct Tab *t, struct Note n) {
     return tone_add_semitones(t->info.tuning.strings[n.string], n.fret);
 }
 
-struct Measure * new_measure(struct Tab *tab, int ts_top, int ts_bottom) {
+void key_to_string(struct Key key, char *buffer, size_t n) {
+    char key_center[10];
+    const char *tonality;
+
+    tone_to_string(key.key_center, false, key_center, 10);
+    switch (key.tonality) {
+    case Major:
+        tonality = "major";
+        break;
+    case Minor:
+        tonality = "minor";
+        break;
+    }
+
+    snprintf(buffer, n, "%s %s", key_center, tonality);    
+}
+
+#define DEFAULT_TS_TOP 4
+#define DEFAULT_TS_BOTTOM 4
+#define DEFAULT_KEY {{C, Natural, 0}, Major}
+
+struct Measure * new_measure(struct Tab *tab) {
     if (tab->measures_n == tab->measures_size) {
         tab->measures = realloc(tab->measures, sizeof(struct Measure) * tab->measures_size * 2);
         tab->measures_size = tab->measures_size * 2;
     }
-    struct Measure *m = &tab->measures[tab->measures_n];
     ++tab->measures_n;
-    *m = (struct Measure){ts_top, ts_bottom, malloc(sizeof(struct Note)), 0, 1};
+    struct Measure *m = &tab->measures[tab->measures_n - 1];
+    if (tab->measures_n > 1) {
+        struct Measure *previous = &tab->measures[tab->measures_n - 2];
+        *m = (struct Measure){previous->ts_top, previous->ts_bottom, previous->key, malloc(sizeof(struct Note)), 0, 1};
+    } else {
+        *m = (struct Measure){DEFAULT_TS_TOP, DEFAULT_TS_BOTTOM, DEFAULT_KEY, malloc(sizeof(struct Note)), 0, 1};
+    }
     return m;
 }
 
@@ -220,7 +254,7 @@ void measure_remove_note(struct Tab *t, int _m, struct Note *n) {
 
 struct Tab new_tab(struct Tuning tuning, int tickrate) {
     struct Tab t = {{NULL, NULL, tuning}, "", malloc(sizeof(struct Measure)), 0, 1, tickrate};
-    t.measures = new_measure(&t, 4, 4);
+    t.measures = new_measure(&t);
     return t;
 }
 
@@ -359,6 +393,12 @@ void process_measure(struct Measure *m, FILE *f) {
 
     m->ts_top = ts_top;
     m->ts_bottom = ts_bottom;
+
+    // TODO
+    struct Key key = {{C, Natural, 0}, Major};
+    m->key = key;
+    // TODO
+ 
     m->notes_n = notes_n;
     m->notes_size = notes_n;
 }
