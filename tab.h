@@ -25,9 +25,13 @@ enum PitchShift {
     DoubleSharp
 };
 
-struct Tone {
-    enum Pitch note;
+struct PitchClass {
+    enum Pitch pitch;
     enum PitchShift shift;
+};
+
+struct Tone {
+    struct PitchClass pitch_class;
     int octave;
 };
 
@@ -44,32 +48,24 @@ enum Tonality {
 };
 
 struct Key {
-    struct Tone key_center; // Ignore the octave for this purpose
+    struct PitchClass key_center; // Ignore the octave for this purpose
     enum Tonality tonality;
 };
 
-// Returns a string for any given tone
-void tone_to_string(struct Tone tone, bool show_octave, char *buffer, size_t n);
+void pitch_class_to_string(struct PitchClass pitch_class, char *buffer, size_t n);
+struct PitchClass string_to_pitch_class(const char *str);
 
-// Returns a tone for a string
+void tone_to_string(struct Tone tone, bool show_octave, char *buffer, size_t n);
 struct Tone string_to_tone(const char *str, bool octave);
 
-// Returns a note for a string
 struct Note string_to_note(const char *str, int string, int offset, int length);
 
-// Computes the distance (in semitones) between two tones. If b > a, result is positive. If a > b, result is negative.
 int tones_distance(struct Tone a, struct Tone b);
-
-// Computes the diatonic distance between two tones
 int tones_distance_diatonic(struct Tone a, struct Tone b);
-
-// Returns a tone for another tone and a distance to add to it
 struct Tone tone_add_semitones(struct Tone t, int semitones);
 
-// Converts a note to a tone
 struct Tone note_to_tone(struct Tab *t, struct Note n);
 
-// Returns a string for a key (suggested buffer size of 10 or more)
 void key_to_string(struct Key key, char *buffer, size_t n);
 
 struct Tuning {

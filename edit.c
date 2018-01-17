@@ -79,7 +79,7 @@ void add_note(struct State *s) {
 void change_key(struct State *s) {
     char buff_key_center[256], buff_tonality[256];
     draw_tab_key_prompt(s, buff_key_center, buff_tonality);
-    struct Tone t = string_to_tone(buff_key_center, false);
+    struct PitchClass t = string_to_pitch_class(buff_key_center);
     enum Tonality tonality;
 
     int tonality_n = strtol(buff_tonality, NULL, 10);

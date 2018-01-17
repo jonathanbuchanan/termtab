@@ -55,19 +55,26 @@ struct StemGroupDrawingData {
 #define BARLINE_THICK (STAFF_SPACE * 0.5)
 #define STAFF_LINE (STAFF_SPACE * 0.13)
 #define BRACKET_EXTENSION 2
+#define TIME_SIGNATURE_WIDTH (STAFF_SPACE * 1.8)
 
-#define SPACE_PER_TICK(tab) ((STAFF_SPACE * 6) / (float)tab->ticks_per_quarter)
+#define SPACE_PER_TICK(tab) ((STAFF_SPACE * 4) / (float)tab->ticks_per_quarter)
 
 struct Fonts load_fonts(HPDF_Doc doc);
 void pdf_display_header(HPDF_Page page, struct Fonts f, struct Tab *t);
 void pdf_draw_staff(HPDF_Page page, struct Fonts f, int y);
-void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Tab *t, struct Measure *m, float x, float width, int staff_y);
+void pdf_draw_time_signature(HPDF_Page page, struct Fonts f, float x, float y, int ts_top, int ts_bottom);
+void pdf_draw_key_signature(HPDF_Page page, struct Fonts f, float x, float y, struct Key key);
+void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Tab *t, int measure_number, float x, float width, int staff_y);
 void pdf_draw_barline(HPDF_Page page, int x, int y1, int y2, float thickness);
 struct StemGroupDrawingData pdf_draw_notegroup(HPDF_Page page, struct Fonts f, float x, float y, struct Tab *t, struct StemGroup group, struct StemInfo info);
 void pdf_draw_beam(HPDF_Page page, float x1, float y1, float x2, float y2, enum StemDirection direction);
 void evaluate_stems(struct Tab *t, struct RhythmData r, struct StemInfo *data);
 
-float pdf_measure_ideal_width(struct Tab *t, struct Measure *m);
+struct MeasureWidthBreakdown {
+    float scalable_width;
+    float non_scalable_width;
+};
+struct MeasureWidthBreakdown pdf_measure_ideal_width(struct Tab *t, int m);
 
 void generate_pdf(struct Tab *t, const char *file) {
     HPDF_Doc pdf;
@@ -81,33 +88,32 @@ void generate_pdf(struct Tab *t, const char *file) {
     HPDF_REAL width;
     width = HPDF_Page_GetWidth(pg1);
 
-    float min_space[t->measures_n];
-    float ideal_space[t->measures_n];
+    struct MeasureWidthBreakdown ideal_space[t->measures_n];
     for (int i = 0; i < t->measures_n; ++i) {
-        struct Measure *m = &t->measures[i];
-        // Compute the minimum space needed for this measure
-        // The minimum space required per note = 2.5 * staff space
-        min_space[i] = 2.5 * STAFF_SPACE * m->notes_n;
-        
-        ideal_space[i] = pdf_measure_ideal_width(t, m);
+        ideal_space[i] = pdf_measure_ideal_width(t, i);
     }
 
     int n_lines = 1;
     int line_number[t->measures_n];
     float calculated_width[t->measures_n];
     float usable_width = width - MARGIN_LEFT - MARGIN_RIGHT - 72;
-    float working_width = 0;
+
+    float working_width_non_scalable = 0;
+    float working_width_scalable = 0;
+
     int leftmost_measure = 0;
     for (int i = 0; i < t->measures_n; ++i) {
         // A measure's width should never be < ideal_space unless required to fit on one line
         // The number of measures should be sufficient such that if one measure were added the width of 1+ measures would be < ideal_space
 
-        if (working_width + ideal_space[i] > usable_width) {
+        if (working_width_non_scalable + working_width_scalable + ideal_space[i].scalable_width + ideal_space[i].non_scalable_width > usable_width) {
             // There's no room for this measure. Add it to the next line.
             // Assess the width of all the measures of the previous line
-            float scale = usable_width / working_width;
+            // non_scalable_width + (scale * scalable_width) = usable_width
+            // scale = (usable_width - non_scalable_width) / scalable_width
+            float scale = (usable_width - working_width_non_scalable) / working_width_scalable;
             for (int j = leftmost_measure; j < i; ++j) {
-                calculated_width[j] = ideal_space[j] * scale;
+                calculated_width[j] = (ideal_space[j].scalable_width * scale) + ideal_space[j].non_scalable_width;
             }
 
             ++n_lines;
@@ -116,12 +122,13 @@ void generate_pdf(struct Tab *t, const char *file) {
         } else {
             // Add this 
             line_number[i] = n_lines - 1;
-            working_width += ideal_space[i];
+            working_width_non_scalable += ideal_space[i].non_scalable_width;
+            working_width_scalable += ideal_space[i].scalable_width;
         }
     }
-    float scale = usable_width / working_width;
+    float scale = (usable_width - working_width_non_scalable) / working_width_scalable;
     for (int i = leftmost_measure; i < t->measures_n; ++i)
-        calculated_width[i] = ideal_space[i] * scale;
+        calculated_width[i] = (ideal_space[i].scalable_width * scale) + ideal_space[i].non_scalable_width;
 
     int m = 0;
     float x = MARGIN_LEFT + 72;
@@ -129,19 +136,42 @@ void generate_pdf(struct Tab *t, const char *file) {
         // Draw the line
         pdf_draw_staff(pg1, f, 600 - (100 * i));
         while (line_number[m] == i) {
-           pdf_draw_measure(pg1, f, t, &t->measures[m], x, calculated_width[m], 600 - (100 * i));
+            // Draw the new time signature if needed
+            if (m == 0) {
+                pdf_draw_time_signature(pg1, f, x, 600 + 50 - (100 * i), t->measures[m].ts_top, t->measures[m].ts_bottom);
+                x += TIME_SIGNATURE_WIDTH;
+            } else if (t->measures[m].ts_top != t->measures[m - 1].ts_top || t->measures[m].ts_bottom != t->measures[m - 1].ts_bottom) {
+                pdf_draw_time_signature(pg1, f, x, 600 + 50 - (100 * i), t->measures[m].ts_top, t->measures[m].ts_bottom);
+                x += TIME_SIGNATURE_WIDTH;
+            }
 
-           x += calculated_width[m];
-           ++m;
+            pdf_draw_measure(pg1, f, t, m, x, calculated_width[m] - ideal_space[m].non_scalable_width, 600 - (100 * i));
+
+            x += calculated_width[m];
+            ++m;
         }
         x = MARGIN_LEFT + 72;
     }
+
+    struct Key k = {{A, Natural}, Minor};
+    pdf_draw_key_signature(pg1, f, MARGIN_LEFT + 36, 600 + 50, k);
 
     HPDF_SaveToFile(pdf, file);
     HPDF_Free(pdf);
 }
 
-float pdf_measure_ideal_width(struct Tab *t, struct Measure *m) {
+struct MeasureWidthBreakdown pdf_measure_ideal_width(struct Tab *t, int measure_number) {
+    struct MeasureWidthBreakdown breakdown;
+
+    struct Measure *m = &t->measures[measure_number];
+    breakdown.scalable_width = 12 + SPACE_PER_TICK(t) * ((m->ts_top * t->ticks_per_quarter * 4) / m->ts_bottom);
+    if (m == 0) {
+        breakdown.non_scalable_width += TIME_SIGNATURE_WIDTH;
+    } else if (t->measures[measure_number].ts_top != t->measures[measure_number - 1].ts_top || t->measures[measure_number].ts_bottom != t->measures[measure_number - 1].ts_bottom) {
+        breakdown.non_scalable_width += TIME_SIGNATURE_WIDTH;
+    }
+
+
     /*float ideal = 0;
     for (int j = 0; j < m->notes_n; ++j) {
         float n_preffered = SPACE_PER_TICK(t) * m->notes[j].length;
@@ -152,7 +182,7 @@ float pdf_measure_ideal_width(struct Tab *t, struct Measure *m) {
             ideal += n_preffered;
     }
     return ideal;*/
-    return 12 + SPACE_PER_TICK(t) * ((m->ts_top * t->ticks_per_quarter * 4) / m->ts_bottom);
+    return breakdown;
 }
 
 struct Fonts load_fonts(HPDF_Doc doc) {
@@ -247,20 +277,124 @@ void pdf_draw_staff(HPDF_Page page, struct Fonts f, int y) {
     HPDF_Page_EndText(page);
 }
 
+#define TS_1 "\xEE\x82\x81"
+#define TS_2 "\xEE\x82\x82"
+#define TS_3 "\xEE\x82\x83"
+#define TS_4 "\xEE\x82\x84"
+#define TS_5 "\xEE\x82\x85"
+#define TS_6 "\xEE\x82\x86"
+#define TS_7 "\xEE\x82\x87"
+#define TS_8 "\xEE\x82\x88"
+#define TS_9 "\xEE\x82\x89"
+
+void get_ts_char(int number, char **buff) {
+    switch (number) {
+        case 1: *buff = TS_1; break;
+        case 2: *buff = TS_2; break;
+        case 3: *buff = TS_3; break;
+        case 4: *buff = TS_4; break;
+        case 5: *buff = TS_5; break;
+        case 6: *buff = TS_6; break;
+        case 7: *buff = TS_7; break;
+        case 8: *buff = TS_8; break;
+        case 9: *buff = TS_9; break;
+    }
+}
+
+void pdf_draw_time_signature(HPDF_Page page, struct Fonts f, float x, float y, int ts_top, int ts_bottom) {
+    char *top_char;
+    char *bottom_char;
+
+    get_ts_char(ts_top, &top_char);
+    get_ts_char(ts_bottom, &bottom_char);
+
+    HPDF_Page_BeginText(page);
+    HPDF_Page_SetFontAndSize(page, f.music, STAFF_EM);
+    // Center on 1st staff line
+    HPDF_Page_MoveTextPos(page, x, y + STAFF_SPACE);
+    HPDF_Page_ShowText(page, bottom_char);
+    HPDF_Page_EndText(page);
+
+    HPDF_Page_BeginText(page);
+    HPDF_Page_SetFontAndSize(page, f.music, STAFF_EM);
+    // Center on 4th staff line
+    HPDF_Page_MoveTextPos(page, x, y + (STAFF_SPACE * 3));
+    HPDF_Page_ShowText(page, top_char);
+    HPDF_Page_EndText(page);
+}
+
+#define FLAT         "\xEE\x89\xA0"
+#define NATURAL      "\xEE\x89\xA1"
+#define SHARP        "\xEE\x89\xA2"
+#define DOUBLE_SHARP "\xEE\x89\xA3"
+#define DOUBLE_FLAT  "\xEE\x89\xA4"
+void pdf_draw_key_signature(HPDF_Page page, struct Fonts f, float x, float y, struct Key key) {
+    const int major_scale_steps[] = {0, 2, 4, 5, 7, 9, 11};
+
+    enum Pitch scale_tones[] = {A, B, C, D, E, F, G};
+    enum PitchShift shifts[7];
+    int signature_type; // (1 = Sharps, 2 = Flats, 3 = C major)
+
+    const int sharps_indices[] = {5, 2, 6, 3, 0, 4, 1};
+    const int flats_indices[] = {1, 4, 0, 3, 6, 2, 5};
+
+    for (int i = 0; i < 7; ++i) {
+        struct Tone t = {scale_tones[i], Natural, 0};
+        //int distance = tones_distance(t, key.key_center); 
+        //int distance_dia = tones_distance_diatonic(t, key.key_center);
+        
+        
+    }
+
+    /*float advance = x;
+    for (int i = 0; i < count; ++i) {
+        // Sharps and flats must be above the G on the second line
+        int spaces;
+        switch (tones[i]) {
+            case A: spaces = 0; break;
+            case B: spaces = 1; break;
+            case C: spaces = 2; break;
+            case D: spaces = 3; break;
+            case E: spaces = 4; break;
+            case F: spaces = 5; break;
+            case G: spaces = 6; break;
+        }
+
+        char *modifier;
+        switch (symbols[i]) {
+            case DoubleFlat: modifier = DOUBLE_FLAT; break;
+            case Flat: modifier = FLAT; break;
+            case Sharp: modifier = SHARP; break;
+            case DoubleSharp: modifier = DOUBLE_SHARP; break;
+        }
+
+        HPDF_Page_BeginText(page);
+        HPDF_Page_SetFontAndSize(page, f.music, STAFF_EM);
+        HPDF_Page_MoveTextPos(page, advance, y + ((STAFF_SPACE / 2) * (spaces + 3)));
+        HPDF_Page_ShowText(page, modifier);
+        HPDF_Page_EndText(page);
+
+        // TODO: Find proper value for this
+        advance += 10;
+    }*/
+}
+
 #define STEM_THICKNESS (STAFF_SPACE * 0.12)
 #define STEM_UP_BOTTOM_RIGHT_X (STAFF_SPACE * 1.18)
 #define STEM_UP_BOTTOM_RIGHT_Y (STAFF_SPACE * 0.168)
 #define STEM_DOWN_TOP_LEFT_X (STAFF_SPACE * 0.0)
 #define STEM_DOWN_TOP_LEFT_Y (STAFF_SPACE * -0.168)
 
-void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Tab *t, struct Measure *m, float x, float width, int y) {
+void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Tab *t, int measure_number, float x, float width, int y) {
+    struct Measure *m = &t->measures[measure_number];
     // Draw upper barline
     pdf_draw_barline(page, x + width, y + 50, y + 50 + STAFF_EM, BARLINE_THIN);
 
     // Draw lower barline
     pdf_draw_barline(page, x + width, y, y + (STAFF_SPACE * 5), BARLINE_THIN);
 
-    float scale = width / pdf_measure_ideal_width(t, m);
+    struct MeasureWidthBreakdown breakdown = pdf_measure_ideal_width(t, measure_number);
+    float scale = (width - breakdown.non_scalable_width) / breakdown.scalable_width;
 
     float offset = 0;
 

@@ -7,9 +7,9 @@
 #include <errno.h>
 #include <stdbool.h>
 
-void tone_to_string(struct Tone tone, bool show_octave, char *buffer, size_t n) {
+void pitch_class_to_string(struct PitchClass pitch_class, char *buffer, size_t n) {
     char *note;
-    switch (tone.note) {
+    switch (pitch_class.pitch) {
         case A: note = "A"; break;
         case B: note = "B"; break;
         case C: note = "C"; break;
@@ -20,7 +20,78 @@ void tone_to_string(struct Tone tone, bool show_octave, char *buffer, size_t n) 
     }
 
     char *shift;
-    switch (tone.shift) {
+    switch (pitch_class.shift) {
+        case DoubleFlat: shift = "bb"; break;
+        case Flat: shift = "b"; break;
+        case Natural: shift = ""; break;
+        case Sharp: shift = "#"; break;
+        case DoubleSharp: shift = "##"; break;
+    }
+
+    snprintf(buffer, n, "%s%s", note, shift);
+}
+
+struct PitchClass string_to_pitch_class(const char *str) {
+    struct PitchClass t;
+    t.shift = Natural;
+    const char *i = str;
+
+    // Note
+    char note = *str;
+    switch (note) {
+        case 'a': t.pitch = A; break;
+        case 'A': t.pitch = A; break;
+        case 'b': t.pitch = B; break;
+        case 'B': t.pitch = B; break;
+        case 'c': t.pitch = C; break;
+        case 'C': t.pitch = C; break;
+        case 'd': t.pitch = D; break;
+        case 'D': t.pitch = D; break;
+        case 'e': t.pitch = E; break;
+        case 'E': t.pitch = E; break;
+        case 'f': t.pitch = F; break;
+        case 'F': t.pitch = F; break;
+        case 'g': t.pitch = G; break;
+        case 'G': t.pitch = G; break;
+    }
+    ++i;
+
+    // Shift
+    if (!isdigit(*i)) {
+        if (strncmp(i, "bb", 2) == 0) {
+            t.shift = DoubleFlat;
+            i += 2;
+        } else if (strncmp(i, "b", 1) == 0) {
+            t.shift = Flat;
+            ++i;
+        } else if (strncmp(i, "##", 2) == 0) {
+            t.shift = DoubleSharp;
+            ++i;
+        } else if (strncmp(i, "#", 1) == 0) {
+            t.shift = Sharp;
+            i += 2;
+        }
+    } else {
+        t.shift = Natural;
+    }
+
+    return t;
+}
+
+void tone_to_string(struct Tone tone, bool show_octave, char *buffer, size_t n) {
+    char *note;
+    switch (tone.pitch_class.pitch) {
+        case A: note = "A"; break;
+        case B: note = "B"; break;
+        case C: note = "C"; break;
+        case D: note = "D"; break;
+        case E: note = "E"; break;
+        case F: note = "F"; break;
+        case G: note = "G"; break;
+    }
+
+    char *shift;
+    switch (tone.pitch_class.shift) {
         case DoubleFlat: shift = "bb"; break;
         case Flat: shift = "b"; break;
         case Natural: shift = ""; break;
@@ -36,46 +107,46 @@ void tone_to_string(struct Tone tone, bool show_octave, char *buffer, size_t n) 
 
 struct Tone string_to_tone(const char *str, bool octave) {
     struct Tone t;
-    t.shift = Natural;
+    t.pitch_class.shift = Natural;
     const char *i = str;
 
     // Note
     char note = *str;
     switch (note) {
-        case 'a': t.note = A; break;
-        case 'A': t.note = A; break;
-        case 'b': t.note = B; break;
-        case 'B': t.note = B; break;
-        case 'c': t.note = C; break;
-        case 'C': t.note = C; break;
-        case 'd': t.note = D; break;
-        case 'D': t.note = D; break;
-        case 'e': t.note = E; break;
-        case 'E': t.note = E; break;
-        case 'f': t.note = F; break;
-        case 'F': t.note = F; break;
-        case 'g': t.note = G; break;
-        case 'G': t.note = G; break;
+        case 'a': t.pitch_class.pitch = A; break;
+        case 'A': t.pitch_class.pitch = A; break;
+        case 'b': t.pitch_class.pitch = B; break;
+        case 'B': t.pitch_class.pitch = B; break;
+        case 'c': t.pitch_class.pitch = C; break;
+        case 'C': t.pitch_class.pitch = C; break;
+        case 'd': t.pitch_class.pitch = D; break;
+        case 'D': t.pitch_class.pitch = D; break;
+        case 'e': t.pitch_class.pitch = E; break;
+        case 'E': t.pitch_class.pitch = E; break;
+        case 'f': t.pitch_class.pitch = F; break;
+        case 'F': t.pitch_class.pitch = F; break;
+        case 'g': t.pitch_class.pitch = G; break;
+        case 'G': t.pitch_class.pitch = G; break;
     }
     ++i;
 
     // Shift
     if (!isdigit(*i)) {
         if (strncmp(i, "bb", 2) == 0) {
-            t.shift = DoubleFlat;
+            t.pitch_class.shift = DoubleFlat;
             i += 2;
         } else if (strncmp(i, "b", 1) == 0) {
-            t.shift = Flat;
+            t.pitch_class.shift = Flat;
             ++i;
-        } else if (strncmp(i, "##", 1) == 0) {
-            t.shift = DoubleSharp;
+        } else if (strncmp(i, "##", 2) == 0) {
+            t.pitch_class.shift = DoubleSharp;
             ++i;
-        } else if (strncmp(i, "#", 2) == 0) {
-            t.shift = Sharp;
+        } else if (strncmp(i, "#", 1) == 0) {
+            t.pitch_class.shift = Sharp;
             i += 2;
         }
     } else {
-        t.shift = Natural;
+        t.pitch_class.shift = Natural;
     }
 
     // Octave
@@ -123,7 +194,7 @@ int tones_distance(struct Tone a, struct Tone b) {
 
     const int distance_per_octave = 12;
 
-    return ((b.octave - a.octave) * distance_per_octave) + ((distance_from_C[b.note] + shift[b.shift]) - (distance_from_C[a.note] + shift[a.shift]));
+    return ((b.octave - a.octave) * distance_per_octave) + ((distance_from_C[b.pitch_class.pitch] + shift[b.pitch_class.shift]) - (distance_from_C[a.pitch_class.pitch] + shift[a.pitch_class.shift]));
 }
 
 int tones_distance_diatonic(struct Tone a, struct Tone b) {
@@ -139,25 +210,25 @@ int tones_distance_diatonic(struct Tone a, struct Tone b) {
 
     const int distance_per_octave = 7;
 
-    return ((b.octave - a.octave) * distance_per_octave) + (distance_from_C[b.note] - distance_from_C[a.note]);
+    return ((b.octave - a.octave) * distance_per_octave) + (distance_from_C[b.pitch_class.pitch] - distance_from_C[a.pitch_class.pitch]);
 }
 
 struct Tone tone_increment_diatonic(struct Tone t) {
-    if (t.note != G && t.note != B)
-        return (struct Tone){t.note + 1, Natural, t.octave};
-    else if (t.note == B)
-        return (struct Tone){t.note + 1, Natural, t.octave + 1};
-    else// if (t.note == G)
-        return (struct Tone){A, Natural, t.octave};
+    if (t.pitch_class.pitch != G && t.pitch_class.pitch != B)
+        return (struct Tone){{t.pitch_class.pitch + 1, Natural}, t.octave};
+    else if (t.pitch_class.pitch == B)
+        return (struct Tone){{t.pitch_class.pitch + 1, Natural}, t.octave + 1};
+    else// if (t.pitch_class.pitch == G)
+        return (struct Tone){{A, Natural}, t.octave};
 }
 
 struct Tone tone_increment_semitone(struct Tone t) {
-    switch (t.shift) {
-        case DoubleFlat: return (struct Tone){t.note, Flat, t.octave}; break;
-        case Flat: return (struct Tone){t.note, Natural, t.octave}; break;
-        case Natural: return (struct Tone){t.note, Sharp, t.octave}; break;
-        case Sharp: return (struct Tone){t.note, DoubleSharp, t.octave}; break;
-        default: return (struct Tone){t.note, t.shift, t.octave}; break;
+    switch (t.pitch_class.shift) {
+        case DoubleFlat: return (struct Tone){{t.pitch_class.pitch, Flat}, t.octave}; break;
+        case Flat: return (struct Tone){{t.pitch_class.pitch, Natural}, t.octave}; break;
+        case Natural: return (struct Tone){{t.pitch_class.pitch, Sharp}, t.octave}; break;
+        case Sharp: return (struct Tone){{t.pitch_class.pitch, DoubleSharp}, t.octave}; break;
+        default: return (struct Tone){{t.pitch_class.pitch, t.pitch_class.shift}, t.octave}; break;
     }
 }
 
@@ -179,7 +250,7 @@ void key_to_string(struct Key key, char *buffer, size_t n) {
     char key_center[10];
     const char *tonality;
 
-    tone_to_string(key.key_center, false, key_center, 10);
+    pitch_class_to_string(key.key_center, key_center, 10);
     switch (key.tonality) {
     case Major:
         tonality = "major";
@@ -194,7 +265,7 @@ void key_to_string(struct Key key, char *buffer, size_t n) {
 
 #define DEFAULT_TS_TOP 4
 #define DEFAULT_TS_BOTTOM 4
-#define DEFAULT_KEY {{C, Natural, 0}, Major}
+#define DEFAULT_KEY {{C, Natural}, Major}
 
 struct Measure * new_measure(struct Tab *tab) {
     if (tab->measures_n == tab->measures_size) {
@@ -253,7 +324,9 @@ void measure_remove_note(struct Tab *t, int _m, struct Note *n) {
 }
 
 struct Tab new_tab(struct Tuning tuning, int tickrate) {
-    struct Tab t = {{NULL, NULL, tuning}, "", malloc(sizeof(struct Measure)), 0, 1, tickrate};
+    struct Tab t = {{malloc(sizeof(char) * 1), malloc(sizeof(char) * 1), tuning}, "", malloc(sizeof(struct Measure)), 0, 1, tickrate};
+    memset(t.info.title, 0, 1);
+    memset(t.info.band, 0, 1);
     t.measures = new_measure(&t);
     return t;
 }
@@ -289,6 +362,10 @@ struct Tab new_tab(struct Tuning tuning, int tickrate) {
 // Measure
 /// Time Signature - Top (int)
 /// Time Signature - Bottom (int)
+/// Key Signature
+///     Pitch (1 byte)
+///     Shift (1 byte)
+///     Tonality (1 byte)
 /// # of notes (int)
 // Note
 /// String (int)
@@ -342,8 +419,8 @@ void process_tuning(struct Tab *t, FILE *f) {
         fread(&shift, sizeof(uint8_t), 1, f);
         fread(&octave, sizeof(uint8_t), 1, f);
 
-        tone->note = note;
-        tone->shift = shift;
+        tone->pitch_class.pitch = note;
+        tone->pitch_class.shift = shift;
         tone->octave = octave;
     }
 }
@@ -370,8 +447,17 @@ void process_measure(struct Measure *m, FILE *f) {
     uint8_t ts_bottom;
     uint32_t notes_n;
 
+    uint8_t key_center_pitch;
+    uint8_t key_center_shift;
+    uint8_t key_center_tonality;
+
     fread(&ts_top, sizeof(uint8_t), 1, f);
     fread(&ts_bottom, sizeof(uint8_t), 1, f);
+
+    fread(&key_center_pitch, sizeof(uint8_t), 1, f);
+    fread(&key_center_shift, sizeof(uint8_t), 1, f);
+    fread(&key_center_tonality, sizeof(uint8_t), 1, f);
+
     fread(&notes_n, sizeof(uint32_t), 1, f);
 
     m->notes = malloc(sizeof(struct Note) * notes_n);
@@ -395,7 +481,7 @@ void process_measure(struct Measure *m, FILE *f) {
     m->ts_bottom = ts_bottom;
 
     // TODO
-    struct Key key = {{C, Natural, 0}, Major};
+    struct Key key = {{key_center_pitch, key_center_shift}, key_center_tonality};
     m->key = key;
     // TODO
  
@@ -541,8 +627,8 @@ void save_tab(const struct Tab *tab, const char *file) {
     fwrite(&tuning_length, sizeof(uint32_t), 1, f);
     for (int i = 0; i < 6; ++i) {
         struct Tone tone = tab->info.tuning.strings[i];
-        uint8_t note = tone.note;
-        uint8_t shift = tone.shift;
+        uint8_t note = tone.pitch_class.pitch;
+        uint8_t shift = tone.pitch_class.shift;
         uint8_t octave = tone.octave;
 
         fwrite(&note, sizeof(uint8_t), 1, f);
@@ -567,10 +653,19 @@ void save_tab(const struct Tab *tab, const char *file) {
         uint8_t ts_bottom = m->ts_bottom;
         uint32_t notes_n = m->notes_n;
 
+        uint8_t key_center_pitch = m->key.key_center.pitch;
+        uint8_t key_center_shift = m->key.key_center.shift;
+        uint8_t key_tonality = m->key.tonality;
+
         fwrite(measure_marker, sizeof(char), 4, f);
         fwrite(&measure_length, sizeof(uint32_t), 1, f);
         fwrite(&ts_top, sizeof(uint8_t), 1, f);
         fwrite(&ts_bottom, sizeof(uint8_t), 1, f);
+
+        fwrite(&key_center_pitch, sizeof(uint8_t), 1, f);
+        fwrite(&key_center_shift, sizeof(uint8_t), 1, f);
+        fwrite(&key_tonality, sizeof(uint8_t), 1, f);
+
         fwrite(&notes_n, sizeof(uint32_t), 1, f);
         for (int j = 0; j < m->notes_n; ++j) {
             struct Note *n = &m->notes[j];
