@@ -3,6 +3,7 @@
 #include <hpdf.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 
 void generate_text_file(struct Tab *t, const char *file) {
 
@@ -64,7 +65,7 @@ void pdf_display_header(HPDF_Page page, struct Fonts f, struct Tab *t);
 void pdf_draw_staff(HPDF_Page page, struct Fonts f, int y);
 void pdf_draw_time_signature(HPDF_Page page, struct Fonts f, float x, float y, int ts_top, int ts_bottom);
 void pdf_draw_key_signature(HPDF_Page page, struct Fonts f, float x, float y, struct Key key);
-void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Tab *t, int measure_number, float x, float width, int staff_y);
+void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Tab *t, int measure_number, float x, float width, int staff_y, bool time_signature, bool key_signature);
 void pdf_draw_barline(HPDF_Page page, int x, int y1, int y2, float thickness);
 struct StemGroupDrawingData pdf_draw_notegroup(HPDF_Page page, struct Fonts f, float x, float y, struct Tab *t, struct StemGroup group, struct StemInfo info);
 void pdf_draw_beam(HPDF_Page page, float x1, float y1, float x2, float y2, enum StemDirection direction);
@@ -74,7 +75,24 @@ struct MeasureWidthBreakdown {
     float scalable_width;
     float non_scalable_width;
 };
-struct MeasureWidthBreakdown pdf_measure_ideal_width(struct Tab *t, int m);
+struct MeasureWidthBreakdown pdf_measure_ideal_width(struct Tab *t, int m, bool time_signature, bool key_signature);
+int key_signature_width(struct Key key);
+
+bool measure_should_show_time_signature(struct Tab *t, int m) {
+    if (m == 0)
+        return true;
+    else if (t->measures[m].ts_top != t->measures[m - 1].ts_top || t->measures[m].ts_bottom != t->measures[m - 1].ts_bottom)
+        return true;
+    return false;
+}
+
+bool measure_should_show_key_signature(struct Tab *t, int m, int line_index) {
+    if (line_index == 0)
+        return true;
+    else if (!keys_equal(t->measures[m].key, t->measures[m - 1].key))
+        return true;
+    return false;
+}
 
 void generate_pdf(struct Tab *t, const char *file) {
     HPDF_Doc pdf;
@@ -88,101 +106,106 @@ void generate_pdf(struct Tab *t, const char *file) {
     HPDF_REAL width;
     width = HPDF_Page_GetWidth(pg1);
 
-    struct MeasureWidthBreakdown ideal_space[t->measures_n];
-    for (int i = 0; i < t->measures_n; ++i) {
-        ideal_space[i] = pdf_measure_ideal_width(t, i);
-    }
-
     int n_lines = 1;
     int line_number[t->measures_n];
+    struct MeasureWidthBreakdown ideal_width[t->measures_n];
     float calculated_width[t->measures_n];
-    float usable_width = width - MARGIN_LEFT - MARGIN_RIGHT - 72;
+    float usable_width = width - MARGIN_LEFT - MARGIN_RIGHT - 36;
 
-    float working_width_non_scalable = 0;
-    float working_width_scalable = 0;
+    struct MeasureWidthBreakdown working_width;
 
     int leftmost_measure = 0;
     for (int i = 0; i < t->measures_n; ++i) {
         // A measure's width should never be < ideal_space unless required to fit on one line
         // The number of measures should be sufficient such that if one measure were added the width of 1+ measures would be < ideal_space
+        bool time_sig = measure_should_show_time_signature(t, i);
+        bool key_sig = measure_should_show_key_signature(t, i, i - leftmost_measure);
 
-        if (working_width_non_scalable + working_width_scalable + ideal_space[i].scalable_width + ideal_space[i].non_scalable_width > usable_width) {
+        struct MeasureWidthBreakdown ideal = pdf_measure_ideal_width(t, i, time_sig, key_sig);
+
+        if (working_width.non_scalable_width + working_width.scalable_width +
+                ideal.scalable_width + ideal.non_scalable_width > usable_width) {
             // There's no room for this measure. Add it to the next line.
             // Assess the width of all the measures of the previous line
             // non_scalable_width + (scale * scalable_width) = usable_width
             // scale = (usable_width - non_scalable_width) / scalable_width
-            float scale = (usable_width - working_width_non_scalable) / working_width_scalable;
+            float scale = (usable_width - working_width.non_scalable_width) / working_width.scalable_width;
             for (int j = leftmost_measure; j < i; ++j) {
-                calculated_width[j] = (ideal_space[j].scalable_width * scale) + ideal_space[j].non_scalable_width;
+                calculated_width[j] = (ideal_width[j].scalable_width * scale) + ideal_width[j].non_scalable_width;
             }
 
             ++n_lines;
+
+
             leftmost_measure = i;
             line_number[i] = n_lines - 1;
+
+            // We need to recalculate width here because the first measure of a line always has a key signature
+            ideal = pdf_measure_ideal_width(t, i, time_sig, true);
+
+            working_width.non_scalable_width = 0;
+            working_width.scalable_width = 0;
         } else {
             // Add this 
             line_number[i] = n_lines - 1;
-            working_width_non_scalable += ideal_space[i].non_scalable_width;
-            working_width_scalable += ideal_space[i].scalable_width;
+
+            working_width.non_scalable_width += ideal.non_scalable_width;
+            working_width.scalable_width += ideal.scalable_width;
         }
+
+        ideal_width[i] = ideal;
     }
-    float scale = (usable_width - working_width_non_scalable) / working_width_scalable;
+    float scale = (usable_width - working_width.non_scalable_width) / working_width.scalable_width;
     for (int i = leftmost_measure; i < t->measures_n; ++i)
-        calculated_width[i] = (ideal_space[i].scalable_width * scale) + ideal_space[i].non_scalable_width;
+        calculated_width[i] = (ideal_width[i].scalable_width * scale) + ideal_width[i].non_scalable_width;
 
     int m = 0;
-    float x = MARGIN_LEFT + 72;
+    float x = MARGIN_LEFT + 36;
     for (int i = 0; i < n_lines; ++i) {
-        // Draw the line
+        int line_index = 0;
+
+        // Draw the lines
         pdf_draw_staff(pg1, f, 600 - (100 * i));
         while (line_number[m] == i) {
-            // Draw the new time signature if needed
-            if (m == 0) {
-                pdf_draw_time_signature(pg1, f, x, 600 + 50 - (100 * i), t->measures[m].ts_top, t->measures[m].ts_bottom);
-                x += TIME_SIGNATURE_WIDTH;
-            } else if (t->measures[m].ts_top != t->measures[m - 1].ts_top || t->measures[m].ts_bottom != t->measures[m - 1].ts_bottom) {
-                pdf_draw_time_signature(pg1, f, x, 600 + 50 - (100 * i), t->measures[m].ts_top, t->measures[m].ts_bottom);
-                x += TIME_SIGNATURE_WIDTH;
-            }
+            bool time_sig = measure_should_show_time_signature(t, m);
+            bool key_sig = measure_should_show_key_signature(t, m, line_index);
 
-            pdf_draw_measure(pg1, f, t, m, x, calculated_width[m] - ideal_space[m].non_scalable_width, 600 - (100 * i));
+            pdf_draw_measure(pg1, f, t, m, x, calculated_width[m], 600 - (100 * i), time_sig, key_sig);
 
             x += calculated_width[m];
             ++m;
+            ++line_index;
         }
         x = MARGIN_LEFT + 72;
     }
-
-    struct Key k = {{A, Natural}, Minor};
-    pdf_draw_key_signature(pg1, f, MARGIN_LEFT + 36, 600 + 50, k);
 
     HPDF_SaveToFile(pdf, file);
     HPDF_Free(pdf);
 }
 
-struct MeasureWidthBreakdown pdf_measure_ideal_width(struct Tab *t, int measure_number) {
+struct MeasureWidthBreakdown pdf_measure_ideal_width(struct Tab *t, int measure_number, bool time_signature, bool key_signature) {
     struct MeasureWidthBreakdown breakdown;
 
     struct Measure *m = &t->measures[measure_number];
     breakdown.scalable_width = 12 + SPACE_PER_TICK(t) * ((m->ts_top * t->ticks_per_quarter * 4) / m->ts_bottom);
-    if (m == 0) {
+    if (time_signature)
         breakdown.non_scalable_width += TIME_SIGNATURE_WIDTH;
-    } else if (t->measures[measure_number].ts_top != t->measures[measure_number - 1].ts_top || t->measures[measure_number].ts_bottom != t->measures[measure_number - 1].ts_bottom) {
-        breakdown.non_scalable_width += TIME_SIGNATURE_WIDTH;
-    }
+    if (key_signature)
+        breakdown.non_scalable_width += key_signature_width(m->key);
 
-
-    /*float ideal = 0;
-    for (int j = 0; j < m->notes_n; ++j) {
-        float n_preffered = SPACE_PER_TICK(t) * m->notes[j].length;
-        float n_min = 2.5 * STAFF_SPACE;
-        if (n_preffered < n_min)
-            ideal += n_min;
-        else
-            ideal += n_preffered;
-    }
-    return ideal;*/
     return breakdown;
+}
+
+int key_signature_width(struct Key key) {
+    struct PitchClass sig[7];
+    get_key_signature(key, sig);
+
+    int symbols = 0;
+    for (int i = 0; i < 7; ++i)
+        if (sig[i].shift != Natural)
+            ++symbols;
+
+    return 10 * symbols;
 }
 
 struct Fonts load_fonts(HPDF_Doc doc) {
@@ -329,28 +352,14 @@ void pdf_draw_time_signature(HPDF_Page page, struct Fonts f, float x, float y, i
 #define DOUBLE_SHARP "\xEE\x89\xA3"
 #define DOUBLE_FLAT  "\xEE\x89\xA4"
 void pdf_draw_key_signature(HPDF_Page page, struct Fonts f, float x, float y, struct Key key) {
-    const int major_scale_steps[] = {0, 2, 4, 5, 7, 9, 11};
+    struct PitchClass classes[7];
+    get_key_signature(key, classes);
 
-    enum Pitch scale_tones[] = {A, B, C, D, E, F, G};
-    enum PitchShift shifts[7];
-    int signature_type; // (1 = Sharps, 2 = Flats, 3 = C major)
-
-    const int sharps_indices[] = {5, 2, 6, 3, 0, 4, 1};
-    const int flats_indices[] = {1, 4, 0, 3, 6, 2, 5};
-
+    float advance = x;
     for (int i = 0; i < 7; ++i) {
-        struct Tone t = {scale_tones[i], Natural, 0};
-        //int distance = tones_distance(t, key.key_center); 
-        //int distance_dia = tones_distance_diatonic(t, key.key_center);
-        
-        
-    }
-
-    /*float advance = x;
-    for (int i = 0; i < count; ++i) {
         // Sharps and flats must be above the G on the second line
         int spaces;
-        switch (tones[i]) {
+        switch (classes[i].pitch) {
             case A: spaces = 0; break;
             case B: spaces = 1; break;
             case C: spaces = 2; break;
@@ -360,12 +369,16 @@ void pdf_draw_key_signature(HPDF_Page page, struct Fonts f, float x, float y, st
             case G: spaces = 6; break;
         }
 
+        if (classes[i].shift == Natural)
+            continue;
+
         char *modifier;
-        switch (symbols[i]) {
+        switch (classes[i].shift) {
             case DoubleFlat: modifier = DOUBLE_FLAT; break;
             case Flat: modifier = FLAT; break;
             case Sharp: modifier = SHARP; break;
             case DoubleSharp: modifier = DOUBLE_SHARP; break;
+            case Natural: modifier = ""; break;
         }
 
         HPDF_Page_BeginText(page);
@@ -376,7 +389,7 @@ void pdf_draw_key_signature(HPDF_Page page, struct Fonts f, float x, float y, st
 
         // TODO: Find proper value for this
         advance += 10;
-    }*/
+    }
 }
 
 #define STEM_THICKNESS (STAFF_SPACE * 0.12)
@@ -385,7 +398,7 @@ void pdf_draw_key_signature(HPDF_Page page, struct Fonts f, float x, float y, st
 #define STEM_DOWN_TOP_LEFT_X (STAFF_SPACE * 0.0)
 #define STEM_DOWN_TOP_LEFT_Y (STAFF_SPACE * -0.168)
 
-void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Tab *t, int measure_number, float x, float width, int y) {
+void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Tab *t, int measure_number, float x, float width, int y, bool time_signature, bool key_signature) {
     struct Measure *m = &t->measures[measure_number];
     // Draw upper barline
     pdf_draw_barline(page, x + width, y + 50, y + 50 + STAFF_EM, BARLINE_THIN);
@@ -393,10 +406,22 @@ void pdf_draw_measure(HPDF_Page page, struct Fonts f, struct Tab *t, int measure
     // Draw lower barline
     pdf_draw_barline(page, x + width, y, y + (STAFF_SPACE * 5), BARLINE_THIN);
 
-    struct MeasureWidthBreakdown breakdown = pdf_measure_ideal_width(t, measure_number);
+    struct MeasureWidthBreakdown breakdown = pdf_measure_ideal_width(t, measure_number, time_signature, key_signature);
     float scale = (width - breakdown.non_scalable_width) / breakdown.scalable_width;
 
     float offset = 0;
+
+    // Key Signature?
+    if (key_signature) {
+        pdf_draw_key_signature(page, f, x + offset, y + 50, m->key);
+        offset += key_signature_width(m->key);
+    }
+
+    // Time Signature?
+    if (time_signature) {
+        pdf_draw_time_signature(page, f, x + offset, y + 50, m->ts_top, m->ts_bottom);
+        offset += TIME_SIGNATURE_WIDTH;
+    }
 
     struct RhythmData r = analyzeMeasure(t, m);
     for (int i = 0; i < m->notes_n; ++i) {

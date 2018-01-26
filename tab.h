@@ -54,6 +54,8 @@ struct Key {
 
 void pitch_class_to_string(struct PitchClass pitch_class, char *buffer, size_t n);
 struct PitchClass string_to_pitch_class(const char *str);
+int pitch_class_distance_positive(struct PitchClass a, struct PitchClass b);
+int pitch_class_distance_diatonic_positive(struct PitchClass a, struct PitchClass b);
 
 void tone_to_string(struct Tone tone, bool show_octave, char *buffer, size_t n);
 struct Tone string_to_tone(const char *str, bool octave);
@@ -67,6 +69,10 @@ struct Tone tone_add_semitones(struct Tone t, int semitones);
 struct Tone note_to_tone(struct Tab *t, struct Note n);
 
 void key_to_string(struct Key key, char *buffer, size_t n);
+bool keys_equal(struct Key a, struct Key b);
+
+// Sets the key signature. The array passed should have length 7
+void get_key_signature(struct Key key, struct PitchClass *shifts);
 
 struct Tuning {
     struct Tone strings[6];

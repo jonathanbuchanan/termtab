@@ -78,6 +78,38 @@ struct PitchClass string_to_pitch_class(const char *str) {
     return t;
 }
 
+int pitch_class_distance_positive(struct PitchClass a, struct PitchClass b) {
+    int distance_from_A[] = {
+        0,  // A
+        2,  // B
+        3,  // C
+        5,  // D
+        7,  // E
+        8,  // F
+        10  // G
+    };
+
+    const int shift[] = {
+        -2, // Double Flat
+        -1, // Flat
+        0,  // Natural
+        1,  // Sharp
+        2,  // Double Sharp
+    };
+
+    int result = (distance_from_A[b.pitch] + shift[b.shift]) - (distance_from_A[a.pitch] + shift[a.shift]);
+    if (result < 0)
+        result += 12;
+    return result;
+}
+
+int pitch_class_distance_diatonic_positive(struct PitchClass a, struct PitchClass b) {
+    int result = (int)b.pitch - (int)a.pitch;
+    if (result < 0)
+        result += 7;
+    return result;
+}
+
 void tone_to_string(struct Tone tone, bool show_octave, char *buffer, size_t n) {
     char *note;
     switch (tone.pitch_class.pitch) {
@@ -261,6 +293,64 @@ void key_to_string(struct Key key, char *buffer, size_t n) {
     }
 
     snprintf(buffer, n, "%s %s", key_center, tonality);    
+}
+
+bool keys_equal(struct Key a, struct Key b) {
+    if (a.key_center.pitch == b.key_center.pitch &&
+            a.key_center.shift == b.key_center.shift &&
+            a.tonality == b.tonality)
+        return true;
+    else
+        return false;
+}
+
+void get_key_signature(struct Key key, struct PitchClass *shifts) {
+    // shifts has length 7
+    const int major_scale_steps[] = {0, 2, 4, 5, 7, 9, 11};
+    const int minor_scale_steps[] = {0, 2, 3, 5, 7, 8, 10};
+
+    enum Pitch scale_tones[] = {A, B, C, D, E, F, G};
+    enum PitchShift pitch_shifts[7];
+    memset(shifts, Natural, sizeof(enum PitchShift) * 7);
+    int signature_type = 3; // (1 = Sharps, 2 = Flats, 3 = C major)
+
+    const int sharps_indices[] = {5, 2, 6, 3, 0, 4, 1};
+    const int flats_indices[] = {1, 4, 0, 3, 6, 2, 5};
+
+    for (int i = 0; i < 7; ++i) {
+        struct PitchClass p = {scale_tones[i], Natural};
+        int distance_diatonic = pitch_class_distance_diatonic_positive(key.key_center, p);
+        int distance = pitch_class_distance_positive(key.key_center, p);
+        int correct_distance;
+        switch (key.tonality) {
+        case Major:
+            correct_distance = major_scale_steps[distance_diatonic];
+            break;
+        case Minor:
+            correct_distance = minor_scale_steps[distance_diatonic];
+            break;
+        }
+        int correction = correct_distance - distance;
+        enum PitchShift shift = (enum PitchShift)(correction + 2);
+        pitch_shifts[i] = shift;
+
+        if (shift == Sharp || shift == DoubleSharp)
+            signature_type = 1;
+        else if (shift == Flat || shift == DoubleFlat)
+            signature_type = 2;
+    }
+
+    for (int i = 0; i < 7; ++i) {
+        int index;
+        if (signature_type == 1)
+            index = sharps_indices[i];
+        else if (signature_type == 2)
+            index = flats_indices[i];
+        else if (signature_type == 3)
+            index = sharps_indices[i];
+
+        shifts[i] = (struct PitchClass){scale_tones[index], pitch_shifts[index]};
+    }
 }
 
 #define DEFAULT_TS_TOP 4
