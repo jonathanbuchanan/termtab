@@ -9,6 +9,12 @@ struct NoteValue {
     int value; // The inverse of the note value (e.g. 2 = half note)
 };
 
+// A rest that lasts for a certain length
+struct Rest {
+    int offset;
+    int length;
+};
+
 struct BeamGroup;
 
 // A grouping of notes that share a stem
@@ -35,6 +41,9 @@ struct RhythmData {
 
     int beams_n;
     struct BeamGroup *beams;
+
+    int rests_n;
+    struct Rest *rests;
 };
 
 struct RhythmData analyzeMeasure(struct Tab *t, struct Measure *measure);

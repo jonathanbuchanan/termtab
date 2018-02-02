@@ -1,4 +1,5 @@
 #include "rhythm.h"
+#include "log.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -15,7 +16,7 @@ int compare_groups(const void *group1, const void *group2) {
 }
 
 struct RhythmData analyzeMeasure(struct Tab *t, struct Measure *m) {
-    struct RhythmData rhythm = {m, 0, NULL, 0, NULL};
+    struct RhythmData rhythm = {m, 0, NULL, 0, NULL, 0, NULL};
 
     // Group the notes up if they occur at the same time (chords, etc.)
     int group_number[m->notes_n];
@@ -35,7 +36,8 @@ struct RhythmData analyzeMeasure(struct Tab *t, struct Measure *m) {
     }
 
     int *group_size = malloc(sizeof(int) * groups_n);
-    memset(group_size, 0, groups_n);
+    for (int i = 0; i < groups_n; ++i)
+        group_size[i] = 0;
     for (int i = 0; i < m->notes_n; ++i) {
         group_size[group_number[i]] += 1;
     }
@@ -113,6 +115,41 @@ struct RhythmData analyzeMeasure(struct Tab *t, struct Measure *m) {
     }
 
     rhythm.beams_n = beams;
+
+    // Look for gaps between stems- put rests here
+    int rests_n = 0;
+    for (int i = 0; i < rhythm.groups_n; ++i) {
+        int next;
+        if (i + 1 < rhythm.groups_n)
+            next = rhythm.groups[i + 1].offset;
+        else
+            next = (t->ticks_per_quarter * m->ts_top * 4) / m->ts_bottom;
+        if (rhythm.groups[i].offset + rhythm.groups[i].notes[0].note->length < next) {
+            // There's a gap between two consecutive stems. Add a rest.
+            ++rests_n;
+        }
+    }
+    if (rhythm.groups_n == 0)
+        rests_n = 1;
+    rhythm.rests = malloc(sizeof(struct Rest) * rests_n);
+
+    for (int i = 0; i < rhythm.groups_n; ++i) {
+        int next;
+        if (i + 1 < rhythm.groups_n)
+            next = rhythm.groups[i + 1].offset;
+        else
+            next = (t->ticks_per_quarter * m->ts_top * 4) / m->ts_bottom;
+        if (rhythm.groups[i].offset + rhythm.groups[i].notes[0].note->length < next) {
+            // There's a gap between two consecutive stems. Add a rest.
+            struct Rest r = {rhythm.groups[i].offset + rhythm.groups[i].notes[0].note->length,
+                    next - (rhythm.groups[i].offset + rhythm.groups[i].notes[0].note->length)};
+            rhythm.rests[i] = r;
+        }
+    }
+    if (rhythm.groups_n == 0) {
+        struct Rest r = {0, (t->ticks_per_quarter * m->ts_top * 4) / m->ts_bottom};
+        rhythm.rests[0] = r;
+    }
 
     return rhythm;
 }

@@ -2,9 +2,12 @@
 #include "cmd.h"
 #include "edit.h"
 #include "tab.h"
+#include "log.h"
 #include <ncurses.h>
 
 int main(int argc, char **argv) {
+    open_log_file("termtab.log");
+
     struct Tab t = new_tab(STANDARD_TUNING, 32);
     struct State s = {init_window(), &t, {0, 0, 0, 32}, "", Command};
     noecho();

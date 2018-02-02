@@ -1,5 +1,6 @@
 #include "export.h"
 #include "rhythm.h"
+#include "log.h"
 #include <hpdf.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -143,8 +144,8 @@ void generate_pdf(struct Tab *t, const char *file) {
             // We need to recalculate width here because the first measure of a line always has a key signature
             ideal = pdf_measure_ideal_width(t, i, time_sig, true);
 
-            working_width.non_scalable_width = 0;
-            working_width.scalable_width = 0;
+            working_width.non_scalable_width = ideal.non_scalable_width;
+            working_width.scalable_width = ideal.scalable_width;
         } else {
             // Add this 
             line_number[i] = n_lines - 1;
@@ -171,12 +172,13 @@ void generate_pdf(struct Tab *t, const char *file) {
             bool key_sig = measure_should_show_key_signature(t, m, line_index);
 
             pdf_draw_measure(pg1, f, t, m, x, calculated_width[m], 600 - (100 * i), time_sig, key_sig);
+            LOG("Line: %d, Offset: %f, Width: %f", i, x, calculated_width[m]);
 
             x += calculated_width[m];
             ++m;
             ++line_index;
         }
-        x = MARGIN_LEFT + 72;
+        x = MARGIN_LEFT + 36;
     }
 
     HPDF_SaveToFile(pdf, file);
