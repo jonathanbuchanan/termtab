@@ -117,7 +117,7 @@ struct RhythmData analyzeMeasure(struct Tab *t, struct Measure *m) {
     rhythm.beams_n = beams;
 
     // Look for gaps between stems- put rests here
-    int rests_n = 0;
+    /*int rests_n = 0;
     for (int i = 0; i < rhythm.groups_n; ++i) {
         int next;
         if (i + 1 < rhythm.groups_n)
@@ -130,9 +130,11 @@ struct RhythmData analyzeMeasure(struct Tab *t, struct Measure *m) {
         }
     }
     if (rhythm.groups_n == 0)
-        rests_n = 1;
-    rhythm.rests = malloc(sizeof(struct Rest) * rests_n);
+        rests_n = 1;*/
+    // Don't guess at this array!!!
+    rhythm.rests = malloc(sizeof(struct Rest) * 100);
 
+    int rests_n = 0;
     for (int i = 0; i < rhythm.groups_n; ++i) {
         int next;
         if (i + 1 < rhythm.groups_n)
@@ -144,29 +146,31 @@ struct RhythmData analyzeMeasure(struct Tab *t, struct Measure *m) {
             struct Rest r = {rhythm.groups[i].offset + rhythm.groups[i].notes[0].note->length,
                     next - (rhythm.groups[i].offset + rhythm.groups[i].notes[0].note->length)};
             rhythm.rests[i] = r;
+            rests_n++;
         }
     }
     if (rhythm.groups_n == 0) {
         struct Rest r = {0, (t->ticks_per_quarter * m->ts_top * 4) / m->ts_bottom};
         rhythm.rests[0] = r;
     }
+    rhythm.rests_n = rests_n;
 
     return rhythm;
 }
 
-struct Note * group_getGreatest(struct Tab *t, struct StemGroup *group) {
+struct Note * group_getGreatest(struct Tab *t, struct StemGroup *group, struct PitchClass *key) {
     struct Note *greatest = group->notes[0].note;
     for (int i = 0; i < group->notes_n; ++i) {
-        if (tones_distance(note_to_tone(t, *greatest), note_to_tone(t, *group->notes[i].note)) > 0)
+        if (tones_distance(note_to_tone(t, *greatest, key), note_to_tone(t, *group->notes[i].note, key)) > 0)
             greatest = group->notes[i].note;
     }
     return greatest;
 }
 
-struct Note * group_getLeast(struct Tab *t, struct StemGroup *group) {
+struct Note * group_getLeast(struct Tab *t, struct StemGroup *group, struct PitchClass *key) {
     struct Note *least = group->notes[0].note;
     for (int i = 0; i < group->notes_n; ++i) {
-        if (tones_distance(note_to_tone(t, *least), note_to_tone(t, *group->notes[i].note)) < 0)
+        if (tones_distance(note_to_tone(t, *least, key), note_to_tone(t, *group->notes[i].note, key)) < 0)
             least = group->notes[i].note;
     }
     return least;

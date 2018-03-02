@@ -113,11 +113,14 @@ void draw_status(struct State *state) {
             char key[10];
             key_to_string(m->key, key, 10);
 
+            struct PitchClass key_signature[7];
+            get_key_signature(m->key, key_signature);
+
             // Measure: [m]
             if (n == NULL)
                 snprintf(format, 256, "Measure: [%d] | Time Signature: [%d/%d] | Key: [%s]", state->edit.measure, m->ts_top, m->ts_bottom, key);
             else {
-                struct Tone t = tone_add_semitones(state->tab->info.tuning.strings[n->string], n->fret); 
+                struct Tone t = tone_add_semitones(state->tab->info.tuning.strings[n->string], n->fret, key_signature); 
                 char note[8];
                 tone_to_string(t, true, note, 8);
                 snprintf(format, 256, "Measure: [%d] | Time Signature: [%d/%d] | Key: [%s] | Note: [%s]", state->edit.measure, m->ts_top, m->ts_bottom, key, note);

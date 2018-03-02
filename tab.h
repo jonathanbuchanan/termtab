@@ -64,15 +64,21 @@ struct Note string_to_note(const char *str, int string, int offset, int length);
 
 int tones_distance(struct Tone a, struct Tone b);
 int tones_distance_diatonic(struct Tone a, struct Tone b);
-struct Tone tone_add_semitones(struct Tone t, int semitones);
+struct Tone tone_add_semitones(struct Tone t, int semitones, struct PitchClass *key);
+struct Tone tone_from_note(struct Note n, struct Tab *t, struct PitchClass *key_signature);
 
-struct Tone note_to_tone(struct Tab *t, struct Note n);
+struct Tone note_to_tone(struct Tab *t, struct Note n, struct PitchClass *key);
 
 void key_to_string(struct Key key, char *buffer, size_t n);
 bool keys_equal(struct Key a, struct Key b);
 
 // Sets the key signature. The array passed should have length 7
 void get_key_signature(struct Key key, struct PitchClass *shifts);
+
+// Changes a key signature so a given tone fits into it
+// The return value is what should be placed in front of the tone as an accidental
+bool key_signature_contains_tone(struct PitchClass *key_signature, struct Tone t);
+enum PitchShift key_signature_add_tone(struct PitchClass *shifts, struct Tone t);
 
 struct Tuning {
     struct Tone strings[6];

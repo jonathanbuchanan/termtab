@@ -247,11 +247,11 @@ int tones_distance_diatonic(struct Tone a, struct Tone b) {
 
 struct Tone tone_increment_diatonic(struct Tone t) {
     if (t.pitch_class.pitch != G && t.pitch_class.pitch != B)
-        return (struct Tone){{t.pitch_class.pitch + 1, Natural}, t.octave};
+        return (struct Tone){{t.pitch_class.pitch + 1, t.pitch_class.shift}, t.octave};
     else if (t.pitch_class.pitch == B)
-        return (struct Tone){{t.pitch_class.pitch + 1, Natural}, t.octave + 1};
+        return (struct Tone){{t.pitch_class.pitch + 1, t.pitch_class.shift}, t.octave + 1};
     else// if (t.pitch_class.pitch == G)
-        return (struct Tone){{A, Natural}, t.octave};
+        return (struct Tone){{A, t.pitch_class.shift}, t.octave};
 }
 
 struct Tone tone_increment_semitone(struct Tone t) {
@@ -264,18 +264,146 @@ struct Tone tone_increment_semitone(struct Tone t) {
     }
 }
 
-struct Tone tone_add_semitones(struct Tone t, int semitones) {
-    // Keep going up until the diatonic distance is 0
+struct Tone tone_add_semitones(struct Tone t, int semitones, struct PitchClass *key) {
     struct Tone new = t;
     while (tones_distance(t, tone_increment_diatonic(new)) <= semitones) {
         new = tone_increment_diatonic(new);
     }
-
     return new;
 }
 
-struct Tone note_to_tone(struct Tab *t, struct Note n) {
-    return tone_add_semitones(t->info.tuning.strings[n.string], n.fret);
+struct Tone tone_from_note(struct Note n, struct Tab *t, struct PitchClass *key_signature) {
+    struct Tone open_string = t->info.tuning.strings[n.string];
+    int semitones = n.fret;
+
+    // Make a list of all possible spellings of this tone
+    enum PitchShift shifts[] = {
+        DoubleFlat,
+        Flat,
+        Natural,
+        Sharp,
+        DoubleSharp
+    };
+
+    int n_spellings = 0;
+    struct Tone *spellings = malloc(sizeof(struct Tone) * 5);
+    for (int i = 0; i < 5; ++i) {
+        enum PitchShift shift = shifts[i];
+        struct Tone new = open_string;
+        new.pitch_class.shift = shift;
+        // Increment diatonically until we have ~ the desired chromatic distance
+        while (tones_distance(open_string, new) < semitones)
+            new = tone_increment_diatonic(new);
+        // Check if we are on the mark
+        if (tones_distance(open_string, new) == semitones) {
+            // Add this valid spelling
+            spellings[n_spellings] = new;
+            ++n_spellings;
+        }
+    }
+
+    // Choose a spelling that most appropriately suits this key
+    // Create a list of enharmonic equivalencies.
+    // The spelling that falls closest in the circle of 5ths
+    // to a note in the key signature is chosen.
+    // If there's two equidistant, choose the flatter.
+    const struct PitchClass circle_of_5ths[] = {
+        {F, DoubleFlat},
+        {C, DoubleFlat},
+        {G, DoubleFlat},
+        {D, DoubleFlat},
+        {A, DoubleFlat},
+        {E, DoubleFlat},
+        {B, DoubleFlat},
+        {F, Flat},
+        {C, Flat},
+        {G, Flat},
+        {D, Flat},
+        {A, Flat},
+        {E, Flat},
+        {B, Flat},
+        {F, Natural},
+        {C, Natural},
+        {G, Natural},
+        {D, Natural},
+        {A, Natural},
+        {E, Natural},
+        {B, Natural},
+        {F, Sharp},
+        {C, Sharp},
+        {G, Sharp},
+        {D, Sharp},
+        {A, Sharp},
+        {E, Sharp},
+        {B, Sharp},
+        {F, DoubleSharp},
+        {C, DoubleSharp},
+        {G, DoubleSharp},
+        {D, DoubleSharp},
+        {A, DoubleSharp},
+        {E, DoubleSharp},
+        {B, DoubleSharp}
+    };
+
+    // Find the indices of the key signature pitch classes
+    // These should be clustered together normally
+    int key_indices[7];
+    for (int i = 0; i < 7; ++i) {
+        for (int j = 0; j < 7 * 5; ++j) {
+            // TODO: Add comparison function for pitch classes
+            if (circle_of_5ths[j].pitch == key_signature[i].pitch && circle_of_5ths[j].shift == key_signature[i].shift) {
+                key_indices[i] = j;
+            }
+        }
+    }
+
+    int spelling_indices[n_spellings];
+    for (int i = 0; i < n_spellings; ++i) {
+        for (int j = 0; j < 7 * 5; ++j) {
+            if (circle_of_5ths[j].pitch == spellings[i].pitch_class.pitch && circle_of_5ths[j].shift == spellings[i].pitch_class.shift) {
+                spelling_indices[i] = j;
+            }
+        }
+    }
+
+    // Look at all the permutations and find the smallest distance
+    int smallest_distance = -1;
+    struct Tone best_spelling;
+    for (int i = 0; i < n_spellings; ++i) {
+        for (int j = 0; j < 7; ++j) {
+            int distance = abs(key_indices[j] - spelling_indices[i]);
+            if (distance < smallest_distance || smallest_distance < 0) {
+                smallest_distance = distance;
+                best_spelling = spellings[i];
+            }
+        }
+    }
+
+    return best_spelling;
+}
+
+bool key_signature_contains_tone(struct PitchClass *key_signature, struct Tone t) {
+    bool contains = false;
+    for (int i = 0; i < 7; ++i) {
+        if (key_signature[i].pitch == t.pitch_class.pitch && key_signature[i].shift == t.pitch_class.shift)
+            contains = true;
+    }
+    return contains;
+}
+
+enum PitchShift key_signature_add_tone(struct PitchClass *key_signature, struct Tone t) {
+    // Loop through until we find the matching pitch (A-G)
+    for (int i = 0; i < 7; ++i) {
+        if (key_signature[i].pitch == t.pitch_class.pitch) {
+            key_signature[i].shift = t.pitch_class.shift;
+            return t.pitch_class.shift;
+        }
+    }
+    return Natural;
+}
+
+struct Tone note_to_tone(struct Tab *t, struct Note n, struct PitchClass *key) {
+    return tone_add_semitones(t->info.tuning.strings[n.string], n.fret, key);
 }
 
 void key_to_string(struct Key key, char *buffer, size_t n) {
