@@ -264,15 +264,7 @@ struct Tone tone_increment_semitone(struct Tone t) {
     }
 }
 
-struct Tone tone_add_semitones(struct Tone t, int semitones, struct PitchClass *key) {
-    struct Tone new = t;
-    while (tones_distance(t, tone_increment_diatonic(new)) <= semitones) {
-        new = tone_increment_diatonic(new);
-    }
-    return new;
-}
-
-struct Tone tone_from_note(struct Note n, struct Tab *t, struct PitchClass *key_signature) {
+struct Tone tone_from_note(struct Note n, struct Tab *t, struct KeySignature key_signature) {
     struct Tone open_string = t->info.tuning.strings[n.string];
     int semitones = n.fret;
 
@@ -351,7 +343,7 @@ struct Tone tone_from_note(struct Note n, struct Tab *t, struct PitchClass *key_
     for (int i = 0; i < 7; ++i) {
         for (int j = 0; j < 7 * 5; ++j) {
             // TODO: Add comparison function for pitch classes
-            if (circle_of_5ths[j].pitch == key_signature[i].pitch && circle_of_5ths[j].shift == key_signature[i].shift) {
+            if (circle_of_5ths[j].pitch == key_signature.notes[i].pitch && circle_of_5ths[j].shift == key_signature.notes[i].shift) {
                 key_indices[i] = j;
             }
         }
@@ -382,28 +374,28 @@ struct Tone tone_from_note(struct Note n, struct Tab *t, struct PitchClass *key_
     return best_spelling;
 }
 
-bool key_signature_contains_tone(struct PitchClass *key_signature, struct Tone t) {
+bool key_signature_contains_tone(struct KeySignature key_signature, struct Tone t) {
     bool contains = false;
     for (int i = 0; i < 7; ++i) {
-        if (key_signature[i].pitch == t.pitch_class.pitch && key_signature[i].shift == t.pitch_class.shift)
+        if (key_signature.notes[i].pitch == t.pitch_class.pitch && key_signature.notes[i].shift == t.pitch_class.shift)
             contains = true;
     }
     return contains;
 }
 
-enum PitchShift key_signature_add_tone(struct PitchClass *key_signature, struct Tone t) {
+enum PitchShift key_signature_add_tone(struct KeySignature *key_signature, struct Tone t) {
     // Loop through until we find the matching pitch (A-G)
     for (int i = 0; i < 7; ++i) {
-        if (key_signature[i].pitch == t.pitch_class.pitch) {
-            key_signature[i].shift = t.pitch_class.shift;
+        if (key_signature->notes[i].pitch == t.pitch_class.pitch) {
+            key_signature->notes[i].shift = t.pitch_class.shift;
             return t.pitch_class.shift;
         }
     }
     return Natural;
 }
 
-struct Tone note_to_tone(struct Tab *t, struct Note n, struct PitchClass *key) {
-    return tone_add_semitones(t->info.tuning.strings[n.string], n.fret, key);
+struct Tone note_to_tone(struct Tab *t, struct Note n, struct KeySignature key) {
+    return tone_from_note(n, t, key);
 }
 
 void key_to_string(struct Key key, char *buffer, size_t n) {
@@ -432,14 +424,16 @@ bool keys_equal(struct Key a, struct Key b) {
         return false;
 }
 
-void get_key_signature(struct Key key, struct PitchClass *shifts) {
+struct KeySignature get_key_signature(struct Key key) {
+    struct KeySignature key_signature;
+
     // shifts has length 7
     const int major_scale_steps[] = {0, 2, 4, 5, 7, 9, 11};
     const int minor_scale_steps[] = {0, 2, 3, 5, 7, 8, 10};
 
     enum Pitch scale_tones[] = {A, B, C, D, E, F, G};
     enum PitchShift pitch_shifts[7];
-    memset(shifts, Natural, sizeof(enum PitchShift) * 7);
+    memset(key_signature.notes, Natural, sizeof(enum PitchShift) * 7);
     int signature_type = 3; // (1 = Sharps, 2 = Flats, 3 = C major)
 
     const int sharps_indices[] = {5, 2, 6, 3, 0, 4, 1};
@@ -477,8 +471,10 @@ void get_key_signature(struct Key key, struct PitchClass *shifts) {
         else if (signature_type == 3)
             index = sharps_indices[i];
 
-        shifts[i] = (struct PitchClass){scale_tones[index], pitch_shifts[index]};
+        key_signature.notes[i] = (struct PitchClass){scale_tones[index], pitch_shifts[index]};
     }
+
+    return key_signature;
 }
 
 #define DEFAULT_TS_TOP 4

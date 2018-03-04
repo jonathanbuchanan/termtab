@@ -52,6 +52,10 @@ struct Key {
     enum Tonality tonality;
 };
 
+struct KeySignature {
+    struct PitchClass notes[7];
+};
+
 void pitch_class_to_string(struct PitchClass pitch_class, char *buffer, size_t n);
 struct PitchClass string_to_pitch_class(const char *str);
 int pitch_class_distance_positive(struct PitchClass a, struct PitchClass b);
@@ -64,21 +68,19 @@ struct Note string_to_note(const char *str, int string, int offset, int length);
 
 int tones_distance(struct Tone a, struct Tone b);
 int tones_distance_diatonic(struct Tone a, struct Tone b);
-struct Tone tone_add_semitones(struct Tone t, int semitones, struct PitchClass *key);
-struct Tone tone_from_note(struct Note n, struct Tab *t, struct PitchClass *key_signature);
+struct Tone tone_from_note(struct Note n, struct Tab *t, struct KeySignature key_signature);
 
-struct Tone note_to_tone(struct Tab *t, struct Note n, struct PitchClass *key);
+struct Tone note_to_tone(struct Tab *t, struct Note n, struct KeySignature key_signature);
 
 void key_to_string(struct Key key, char *buffer, size_t n);
 bool keys_equal(struct Key a, struct Key b);
 
-// Sets the key signature. The array passed should have length 7
-void get_key_signature(struct Key key, struct PitchClass *shifts);
+struct KeySignature get_key_signature(struct Key key);
 
 // Changes a key signature so a given tone fits into it
 // The return value is what should be placed in front of the tone as an accidental
-bool key_signature_contains_tone(struct PitchClass *key_signature, struct Tone t);
-enum PitchShift key_signature_add_tone(struct PitchClass *shifts, struct Tone t);
+bool key_signature_contains_tone(struct KeySignature key_signature, struct Tone t);
+enum PitchShift key_signature_add_tone(struct KeySignature *key_signature, struct Tone t);
 
 struct Tuning {
     struct Tone strings[6];

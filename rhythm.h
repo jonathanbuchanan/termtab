@@ -47,7 +47,7 @@ struct RhythmData {
 };
 
 struct RhythmData analyzeMeasure(struct Tab *t, struct Measure *measure);
-struct Note * group_getGreatest(struct Tab *t, struct StemGroup *group, struct PitchClass *key);
-struct Note * group_getLeast(struct Tab *t, struct StemGroup *group, struct PitchClass *key);
+struct Note * group_getGreatest(struct Tab *t, struct StemGroup *group, struct KeySignature key);
+struct Note * group_getLeast(struct Tab *t, struct StemGroup *group, struct KeySignature key);
 
 #endif

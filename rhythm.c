@@ -158,7 +158,7 @@ struct RhythmData analyzeMeasure(struct Tab *t, struct Measure *m) {
     return rhythm;
 }
 
-struct Note * group_getGreatest(struct Tab *t, struct StemGroup *group, struct PitchClass *key) {
+struct Note * group_getGreatest(struct Tab *t, struct StemGroup *group, struct KeySignature key) {
     struct Note *greatest = group->notes[0].note;
     for (int i = 0; i < group->notes_n; ++i) {
         if (tones_distance(note_to_tone(t, *greatest, key), note_to_tone(t, *group->notes[i].note, key)) > 0)
@@ -167,7 +167,7 @@ struct Note * group_getGreatest(struct Tab *t, struct StemGroup *group, struct P
     return greatest;
 }
 
-struct Note * group_getLeast(struct Tab *t, struct StemGroup *group, struct PitchClass *key) {
+struct Note * group_getLeast(struct Tab *t, struct StemGroup *group, struct KeySignature key) {
     struct Note *least = group->notes[0].note;
     for (int i = 0; i < group->notes_n; ++i) {
         if (tones_distance(note_to_tone(t, *least, key), note_to_tone(t, *group->notes[i].note, key)) < 0)
