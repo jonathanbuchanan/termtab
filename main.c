@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     open_log_file("termtab.log");
 
     struct Tab t = new_tab(STANDARD_TUNING, 32);
-    struct State s = {init_window(), &t, {0, 0, 0, 32}, "", Command};
+    struct State s = {init_window(), &t, {0, 0, 0, 32}, {NULL, NULL, 0}, "", Command};
     noecho();
     keypad(stdscr, TRUE);
     curs_set(0);
@@ -25,6 +25,8 @@ int main(int argc, char **argv) {
         case Edit:
             running = edit_input(&s, next_char(s.window));
             break;
+        case Select:
+            running = select_input(&s, next_char(s.window));
         }
     } while (running);
     kill_window(s.window);

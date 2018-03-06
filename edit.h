@@ -24,6 +24,14 @@ struct EditingState {
     struct LayoutCache layout;
 };
 
+// In select mode, the user is prompted to pick a note
+// The callback is called with a pointer to the chosen note after selection
+struct SelectState {
+    void (*callback)(struct State *s, struct Note *, void *userdata);
+    void *userdata;
+    int previousMode;
+};
+
 
 
 bool edit_input(struct State *s, int c);
@@ -31,5 +39,12 @@ bool edit_input(struct State *s, int c);
 void remove_note(struct State *s);
 void add_note(struct State *s);
 void change_key(struct State *s);
+void add_technique(struct State *s);
+void add_technique_callback(struct State *s, struct Note *n, void *userdata);
+
+
+
+void enter_select_mode(struct State *s, void (*callback)(struct State *s, struct Note *, void *userdata), void *userdata, int previousMode);
+bool select_input(struct State *s, int c);
 
 #endif

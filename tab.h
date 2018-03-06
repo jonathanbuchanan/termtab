@@ -93,6 +93,18 @@ struct TabInfo {
     struct Tuning tuning;
 };
 
+enum TechniqueType {
+    Hammer,
+    PullOff,
+    Slide
+};
+
+struct Technique {
+    enum TechniqueType type;
+    struct Note *first;
+    struct Note *second;
+};
+
 struct Measure {
     int ts_top, ts_bottom;
     struct Key key;

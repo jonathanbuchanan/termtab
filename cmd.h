@@ -10,13 +10,15 @@ struct Window;
 
 enum Mode {
     Command,
-    Edit
+    Edit,
+    Select
 };
 
 struct State {
     struct Window *window;
     struct Tab *tab;
     struct EditingState edit;
+    struct SelectState select;
     char *msg;
     enum Mode mode;
 };

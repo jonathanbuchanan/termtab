@@ -91,6 +91,45 @@ void end_input() {
 }
 
 
+void draw_edit(struct State *state, char *format) {
+    struct Measure *m = &state->tab->measures[state->edit.measure];
+    struct Note *n = measure_get_note(state->tab, state->edit.measure, state->edit.string, state->edit.x);
+
+    char key[10];
+    key_to_string(m->key, key, 10);
+
+    struct KeySignature key_signature = get_key_signature(m->key);
+
+    // Measure: [m]
+    if (n == NULL)
+        snprintf(format, 256, "Measure: [%d] | Time Signature: [%d/%d] | Key: [%s]", state->edit.measure, m->ts_top, m->ts_bottom, key);
+    else {
+        struct Tone t = tone_from_note(*n, state->tab, key_signature);
+        char note[8];
+        tone_to_string(t, true, note, 8);
+        snprintf(format, 256, "Measure: [%d] | Time Signature: [%d/%d] | Key: [%s] | Note: [%s]", state->edit.measure, m->ts_top, m->ts_bottom, key, note);
+    }
+}
+
+void draw_select(struct State *state, char *format) {
+    struct Measure *m = &state->tab->measures[state->edit.measure];
+    struct Note *n = measure_get_note(state->tab, state->edit.measure, state->edit.string, state->edit.x);
+
+    char key[10];
+    key_to_string(m->key, key, 10);
+
+    struct KeySignature key_signature = get_key_signature(m->key);
+
+    // Measure: [m]
+    if (n == NULL)
+        snprintf(format, 256, "Measure: [%d] | Time Signature: [%d/%d] | Key: [%s]", state->edit.measure, m->ts_top, m->ts_bottom, key);
+    else {
+        struct Tone t = tone_from_note(*n, state->tab, key_signature);
+        char note[8];
+        tone_to_string(t, true, note, 8);
+        snprintf(format, 256, "Measure: [%d] | Time Signature: [%d/%d] | Key: [%s] | Note: [%s]", state->edit.measure, m->ts_top, m->ts_bottom, key, note);
+    }
+}
 
 void draw_status(struct State *state) {
     int x, y;
@@ -106,24 +145,11 @@ void draw_status(struct State *state) {
             break;
         case Edit:
             mode = "EDIT";
-
-            struct Measure *m = &state->tab->measures[state->edit.measure];
-            struct Note *n = measure_get_note(state->tab, state->edit.measure, state->edit.string, state->edit.x);
-
-            char key[10];
-            key_to_string(m->key, key, 10);
-
-            struct KeySignature key_signature = get_key_signature(m->key);
-
-            // Measure: [m]
-            if (n == NULL)
-                snprintf(format, 256, "Measure: [%d] | Time Signature: [%d/%d] | Key: [%s]", state->edit.measure, m->ts_top, m->ts_bottom, key);
-            else {
-                struct Tone t = tone_from_note(*n, state->tab, key_signature);
-                char note[8];
-                tone_to_string(t, true, note, 8);
-                snprintf(format, 256, "Measure: [%d] | Time Signature: [%d/%d] | Key: [%s] | Note: [%s]", state->edit.measure, m->ts_top, m->ts_bottom, key, note);
-            }
+            draw_edit(state, format);
+            break;
+        case Select:
+            mode = "SELECT";
+            draw_select(state, format);
             break;
     }
 
@@ -274,6 +300,18 @@ void draw_tab_key_prompt(struct State *state, char *buffer_key_center, char *buf
     wrefresh(state->window->tab);
 }
 
+void draw_tab_technique_prompt(struct State *state, char *buffer) {
+    mvwprintw(state->window->tab, 3, 0, "Choose a technique (1=hammer, 2=pulloff, 3=slide): ");
+    wrefresh(state->window->tab);
+    begin_input();
+    mvwgetstr(state->window->tab, 3, 51, buffer);
+    end_input();
+
+    wmove(state->window->tab, 3, 0);
+    wclrtoeol(state->window->tab);
+    wrefresh(state->window->tab);
+}
+
 #define TICKS_PER_COLUMN 2
 int draw_measure(struct Window *w, int x, int y, struct Tab *t, int measure) {
     struct Measure *m = &t->measures[measure];
@@ -292,7 +330,7 @@ int measure_width(struct Tab *t, struct Measure *m) {
 }
 
 void position_cursor(struct State *state) {
-    if (state->mode != Edit)
+    if (state->mode != Edit && state->mode != Select)
         return;
     init_pair(2, COLOR_WHITE, COLOR_WHITE);
     struct Window *window = state->window;
