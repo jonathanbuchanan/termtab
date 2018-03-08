@@ -94,8 +94,7 @@ struct TabInfo {
 };
 
 enum TechniqueType {
-    Hammer,
-    PullOff,
+    Legato,
     Slide
 };
 
@@ -112,6 +111,10 @@ struct Measure {
     struct Note *notes;
     size_t notes_n;
     size_t notes_size;
+
+    struct Technique *techniques;
+    size_t techniques_n;
+    size_t techniques_size;
 };
 
 struct Tab {
@@ -138,6 +141,9 @@ struct Note * measure_new_note(struct Tab *tab, int measure, struct Note n);
 
 // Removes a note from a measure
 void measure_remove_note(struct Tab *tab, int measure, struct Note *n);
+
+// Adds a technique to a measure
+struct Technique * measure_new_technique(struct Tab *tab, int measure, struct Technique t);
 
 // Creates a blank tab with one measure
 struct Tab new_tab(struct Tuning t, int tick_rate);

@@ -490,9 +490,13 @@ struct Measure * new_measure(struct Tab *tab) {
     struct Measure *m = &tab->measures[tab->measures_n - 1];
     if (tab->measures_n > 1) {
         struct Measure *previous = &tab->measures[tab->measures_n - 2];
-        *m = (struct Measure){previous->ts_top, previous->ts_bottom, previous->key, malloc(sizeof(struct Note)), 0, 1};
+        *m = (struct Measure){previous->ts_top, previous->ts_bottom, previous->key,
+                malloc(sizeof(struct Note)), 0, 1,
+                malloc(sizeof(struct Technique)), 0, 1};
     } else {
-        *m = (struct Measure){DEFAULT_TS_TOP, DEFAULT_TS_BOTTOM, DEFAULT_KEY, malloc(sizeof(struct Note)), 0, 1};
+        *m = (struct Measure){DEFAULT_TS_TOP, DEFAULT_TS_BOTTOM, DEFAULT_KEY,
+                malloc(sizeof(struct Note)), 0, 1,
+                malloc(sizeof(struct Technique)), 0, 1};
     }
     return m;
 }
@@ -535,6 +539,21 @@ void measure_remove_note(struct Tab *t, int _m, struct Note *n) {
     free(m->notes);
     m->notes = temp_notes;
     --m->notes_n;
+}
+
+struct Technique * measure_new_technique(struct Tab *t, int _m, struct Technique tech) {
+    struct Measure *m = &t->measures[_m];
+    struct Technique *technique = NULL;
+    if (technique == NULL) {
+        if (m->techniques_n == m->techniques_size) {
+            m->techniques = realloc(m->techniques, sizeof(struct Technique) * m->techniques_size * 2);
+            m->techniques_size *= 2;
+        }
+        technique = &m->techniques[m->techniques_n];
+        ++m->techniques_n;
+    }
+    *technique = tech;
+    return technique;
 }
 
 struct Tab new_tab(struct Tuning tuning, int tickrate) {

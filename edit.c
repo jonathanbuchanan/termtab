@@ -107,27 +107,22 @@ void add_technique(struct State *s) {
     char buff[256];
     draw_tab_technique_prompt(s, buff);
     int tech = strtol(buff, NULL, 10);
-    // 1=hammer, 2=pulloff, 3=slide
+    // 1=legato, 2=slide
 
     enum TechniqueType type;
     bool second_note = false;
     switch (tech) {
         case 1:
-            type = Hammer;
+            type = Legato;
             second_note = true;
             break;
         case 2:
-            type = PullOff;
-            second_note = true;
-            break;
-        case 3:
             type = Slide;
             second_note = true;
             break;
     }
-
     struct Technique *technique = malloc(sizeof(struct Technique));
-    technique->type = tech;
+    technique->type = type;
 
     struct Note *n = measure_get_note(s->tab, s->edit.measure, s->edit.string, s->edit.x);
     technique->first = n;
@@ -143,12 +138,12 @@ void add_technique(struct State *s) {
     
 }
 
-#include "log.h"
-
 void add_technique_callback(struct State *s, struct Note *n, void *userdata) {
     // Add the tech!
     struct Technique tech = *(struct Technique *)userdata;
     tech.second = n;
+
+    measure_new_technique(s->tab, s->edit.measure, tech);
 
     free(userdata);
 }
@@ -176,14 +171,6 @@ bool select_input(struct State *s, int c) {
     case 'h':
         if (s->edit.x > 0)
             s->edit.x -= s->edit.cursor_width;
-        break;
-    case 'j':
-        if (s->edit.string < 5)
-            ++s->edit.string;
-        break;
-    case 'k':
-        if (s->edit.string > 0)
-            --s->edit.string;
         break;
     case 'l':
         if (s->edit.x < measure_get_ticks(s->tab, s->edit.measure) - s->edit.cursor_width)
