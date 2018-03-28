@@ -491,12 +491,10 @@ struct Measure * new_measure(struct Tab *tab) {
     if (tab->measures_n > 1) {
         struct Measure *previous = &tab->measures[tab->measures_n - 2];
         *m = (struct Measure){previous->ts_top, previous->ts_bottom, previous->key,
-                malloc(sizeof(struct Note)), 0, 1,
-                malloc(sizeof(struct Technique)), 0, 1};
+                malloc(sizeof(struct Note)), 0, 1};
     } else {
         *m = (struct Measure){DEFAULT_TS_TOP, DEFAULT_TS_BOTTOM, DEFAULT_KEY,
-                malloc(sizeof(struct Note)), 0, 1,
-                malloc(sizeof(struct Technique)), 0, 1};
+                malloc(sizeof(struct Note)), 0, 1};
     }
     return m;
 }
@@ -516,6 +514,10 @@ struct Note * measure_get_note(struct Tab *t, int _m, int string, int offset) {
 }
 
 struct Note * measure_new_note(struct Tab *t, int _m, struct Note n) {
+    n.techniques = malloc(sizeof(struct Technique));
+    n.techniques_n = 0;
+    n.techniques_size = 1;
+
     struct Measure *m = &t->measures[_m];
     struct Note *note = measure_get_note(t, _m, n.string, n.offset);
     if (note == NULL) {
@@ -541,16 +543,15 @@ void measure_remove_note(struct Tab *t, int _m, struct Note *n) {
     --m->notes_n;
 }
 
-struct Technique * measure_new_technique(struct Tab *t, int _m, struct Technique tech) {
-    struct Measure *m = &t->measures[_m];
+struct Technique * note_new_technique(struct Note *n, struct Technique tech) {
     struct Technique *technique = NULL;
     if (technique == NULL) {
-        if (m->techniques_n == m->techniques_size) {
-            m->techniques = realloc(m->techniques, sizeof(struct Technique) * m->techniques_size * 2);
-            m->techniques_size *= 2;
+        if (n->techniques_n == n->techniques_size) {
+            n->techniques = realloc(n->techniques, sizeof(struct Technique) * n->techniques_size * 2);
+            n->techniques_size *= 2;
         }
-        technique = &m->techniques[m->techniques_n];
-        ++m->techniques_n;
+        technique = &n->techniques[n->techniques_n];
+        ++n->techniques_n;
     }
     *technique = tech;
     return technique;
@@ -885,6 +886,7 @@ void save_tab(const struct Tab *tab, const char *file) {
         uint8_t ts_top = m->ts_top;
         uint8_t ts_bottom = m->ts_bottom;
         uint32_t notes_n = m->notes_n;
+        //uint32_t techniques_n = m->techniques_n;
 
         uint8_t key_center_pitch = m->key.key_center.pitch;
         uint8_t key_center_shift = m->key.key_center.shift;
@@ -916,6 +918,17 @@ void save_tab(const struct Tab *tab, const char *file) {
             fwrite(&offset, sizeof(uint32_t), 1, f);
             fwrite(&length, sizeof(uint32_t), 1, f);
         }
+
+        /*fwrite(&techniques_n, sizeof(uint32_t), 1, f);
+        for (int j = 0; j < m->techniques_n; ++j) {
+            struct Technique *tech = &m->techniques[j];
+
+            uint32_t type = tech->type;
+            uint32_t m1;
+            uint32_t n1;
+            uint32_t m2;
+            uint32_t n2;
+        }*/
     }
 
 

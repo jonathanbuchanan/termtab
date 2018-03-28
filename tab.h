@@ -35,11 +35,27 @@ struct Tone {
     int octave;
 };
 
+enum TechniqueType {
+    LegatoTo,
+    LegatoFrom,
+    SlideTo,
+    SlideFrom
+};
+
+struct Technique {
+    enum TechniqueType type;
+    struct Note *receiver;
+};
+
 struct Note {
     int string;
     int fret;
     int offset;
     int length;
+
+    struct Technique *techniques;
+    size_t techniques_n;
+    size_t techniques_size;
 };
 
 enum Tonality {
@@ -93,16 +109,7 @@ struct TabInfo {
     struct Tuning tuning;
 };
 
-enum TechniqueType {
-    Legato,
-    Slide
-};
 
-struct Technique {
-    enum TechniqueType type;
-    struct Note *first;
-    struct Note *second;
-};
 
 struct Measure {
     int ts_top, ts_bottom;
@@ -111,10 +118,6 @@ struct Measure {
     struct Note *notes;
     size_t notes_n;
     size_t notes_size;
-
-    struct Technique *techniques;
-    size_t techniques_n;
-    size_t techniques_size;
 };
 
 struct Tab {
@@ -143,7 +146,7 @@ struct Note * measure_new_note(struct Tab *tab, int measure, struct Note n);
 void measure_remove_note(struct Tab *tab, int measure, struct Note *n);
 
 // Adds a technique to a measure
-struct Technique * measure_new_technique(struct Tab *tab, int measure, struct Technique t);
+struct Technique * note_new_technique(struct Note *n, struct Technique t);
 
 // Creates a blank tab with one measure
 struct Tab new_tab(struct Tuning t, int tick_rate);

@@ -320,34 +320,30 @@ int draw_measure(struct Window *w, int x, int y, struct Tab *t, int measure) {
     mvwprintw(w->tab, y, x, "%d", measure);
     for (int i = 0; i < m->notes_n; ++i) {
         struct Note *n = &m->notes[i];
-        mvwprintw(w->tab, y + 1 + (2 * n->string), x + (n->offset / TICKS_PER_COLUMN), "%d", n->fret);
-    }
-    for (int i = 0; i < m->techniques_n; ++i) {
-        struct Technique *tech = &m->techniques[i];
-        struct Note *n;
-        if (tech->second != NULL)
-            n = tech->second;
-        else
-            n = tech->first;
-        int x_ = x + (n->offset / TICKS_PER_COLUMN);
-        char c;
-        switch (tech->type) {
-        case Legato:
-            // Are we moving up or down?
-            if (tech->first->fret > tech->second->fret)
-                c = 'p';
-            else if (tech->first->fret < tech->second->fret)
-                c = 'h';
-            break;
-        case Slide:
-            // Are we moving up or down?
-            if (tech->first->fret > tech->second->fret)
-                c = '\\';
-            else if (tech->first->fret < tech->second->fret)
-                c = '/';
-            break;
+        int _x = x + (n->offset / TICKS_PER_COLUMN);
+        mvwprintw(w->tab, y + 1 + (2 * n->string), _x, "%d", n->fret);
+        for (int j = 0; j < n->techniques_n; ++j) {
+            struct Technique *tech = &n->techniques[j];
+            char c = '\0';
+            switch (tech->type) {
+            case LegatoFrom:
+                // Are we moving up or down?
+                if (tech->receiver->fret > n->fret)
+                    c = 'p';
+                else if (tech->receiver->fret < n->fret)
+                    c = 'h';
+                break;
+            case SlideFrom:
+                // Are we moving up or down?
+                if (tech->receiver->fret > n->fret)
+                    c = '\\';
+                else if (tech->receiver->fret < n->fret)
+                    c = '/';   
+                break;
+            }
+            if (c != '\0')
+                mvwprintw(w->tab, y + 1 + (2 * n->string), _x - 1, "%c", c);
         }
-        mvwprintw(w->tab, y + 1 + (2 * n->string), x_ - 1, "%c", c);
     }
     return width + 1;
 }

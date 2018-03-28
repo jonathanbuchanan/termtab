@@ -103,34 +103,47 @@ void change_key(struct State *s) {
 
 #include "log.h"
 
+enum TechniqueClass {
+    Legato,
+    Slide
+};
+
+struct TechniquePrototype {
+    enum TechniqueClass class;
+    int n_measure;
+    int n_string;
+    int n_offset;
+    struct Note *note;
+};
+
 void add_technique(struct State *s) {
     char buff[256];
     draw_tab_technique_prompt(s, buff);
     int tech = strtol(buff, NULL, 10);
     // 1=legato, 2=slide
 
-    enum TechniqueType type;
+    struct TechniquePrototype *proto = malloc(sizeof(struct TechniquePrototype));
     bool second_note = false;
     switch (tech) {
         case 1:
-            type = Legato;
+            proto->class = Legato;
             second_note = true;
             break;
         case 2:
-            type = Slide;
+            proto->class = Slide;
             second_note = true;
             break;
     }
-    struct Technique *technique = malloc(sizeof(struct Technique));
-    technique->type = type;
-
     struct Note *n = measure_get_note(s->tab, s->edit.measure, s->edit.string, s->edit.x);
-    technique->first = n;
+    proto->n_measure = s->edit.measure;
+    proto->n_string = s->edit.string;
+    proto->n_offset = s->edit.x;
+    proto->note = n;
 
     // Go into select mode to choose a second argument
     // Send our incomplete technique as userdata
     if (second_note) {
-        enter_select_mode(s, add_technique_callback, technique, Edit);
+        enter_select_mode(s, add_technique_callback, proto, Edit);
     } else {
 
     }
@@ -140,10 +153,40 @@ void add_technique(struct State *s) {
 
 void add_technique_callback(struct State *s, struct Note *n, void *userdata) {
     // Add the tech!
-    struct Technique tech = *(struct Technique *)userdata;
-    tech.second = n;
+    struct TechniquePrototype proto = *(struct TechniquePrototype *)userdata;
 
-    measure_new_technique(s->tab, s->edit.measure, tech);
+    struct Note *first;
+    struct Note *second;
+    if (proto.n_measure < s->edit.measure) {
+        first = proto.note;
+        second = n;
+    } else if (proto.n_measure > s->edit.measure) {
+        first = n;
+        second = proto.note;
+    } else if (proto.n_offset < s->edit.x) {
+        first = proto.note;
+        second = n;
+    } else if (proto.n_offset > s->edit.x) {
+        first = n;
+        second = proto.note;
+    }
+
+    struct Technique to;
+    struct Technique from;
+
+    switch (proto.class) {
+    case Legato:
+        to = (struct Technique){LegatoTo, second};
+        from = (struct Technique){LegatoFrom, first};
+        break;
+    case Slide:
+        to = (struct Technique){SlideTo, second};
+        from = (struct Technique){SlideFrom, first};
+        break;
+    }
+
+    note_new_technique(first, to);
+    note_new_technique(second, from);
 
     free(userdata);
 }
