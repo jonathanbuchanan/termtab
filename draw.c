@@ -76,8 +76,6 @@ void draw(struct State *state) {
     draw_status(state);
     draw_cmd(state);
     draw_tab(state);
-
-    position_cursor(state);
 }
 
 void begin_input() {
@@ -258,7 +256,7 @@ void draw_tab(struct State *state) {
 
         while (line_number[m] == line && m < state->tab->measures_n) {
             state->edit.layout.offsets[m] = offset;
-            offset += draw_measure(window, offset, y, tab, m);
+            offset += draw_measure(state, offset, y, m);
             ++m;
         }
 
@@ -313,14 +311,33 @@ void draw_tab_technique_prompt(struct State *state, char *buffer) {
 }
 
 #define TICKS_PER_COLUMN 2
-int draw_measure(struct Window *w, int x, int y, struct Tab *t, int measure) {
+int draw_measure(struct State *state, int x, int y, int measure) {
+    struct Window *w = state->window;
+    struct Tab *t = state->tab;
+
     struct Measure *m = &t->measures[measure];
     int width = (m->ts_top * t->ticks_per_quarter * 4) / (m->ts_bottom * TICKS_PER_COLUMN);
     mvwvline(w->tab, y + 1, x + width, '|', 11);
     mvwprintw(w->tab, y, x, "%d", measure);
+
+    int cursor_line = -1;
+    int cursor_offset = 0;
+
+    if (state->edit.measure == measure && (state->mode == Edit || state->mode == Select)) {
+        cursor_line = state->edit.string;
+        cursor_offset = state->edit.x / TICKS_PER_COLUMN;
+        // Replace the lines here with a different background for the cursor
+        init_pair(2, COLOR_BLACK, COLOR_WHITE);
+        wattron(w->tab, COLOR_PAIR(2));
+        mvwhline(w->tab, y + 1 + (2 * cursor_line), x + cursor_offset, '-', state->edit.cursor_width / TICKS_PER_COLUMN);
+        wattroff(w->tab, COLOR_PAIR(2));
+    }
     for (int i = 0; i < m->notes_n; ++i) {
         struct Note *n = &m->notes[i];
         int _x = x + (n->offset / TICKS_PER_COLUMN);
+        // Am I within the cursor?
+        if (cursor_line == n->string && n->offset >= state->edit.x && n->offset < state->edit.x + state->edit.cursor_width)
+            wattron(w->tab, COLOR_PAIR(2));
         mvwprintw(w->tab, y + 1 + (2 * n->string), _x, "%d", n->fret);
         for (int j = 0; j < n->techniques_n; ++j) {
             struct Technique *tech = &n->techniques[j];
@@ -350,37 +367,13 @@ int draw_measure(struct Window *w, int x, int y, struct Tab *t, int measure) {
             if (c != '\0')
                 mvwprintw(w->tab, y + 1 + (2 * n->string), _x - 1, "%c", c);
         }
+        wattroff(w->tab, COLOR_PAIR(2));
     }
     return width + 1;
 }
 
 int measure_width(struct Tab *t, struct Measure *m) {
     return ((m->ts_top * t->ticks_per_quarter * 4) / (m->ts_bottom * TICKS_PER_COLUMN)) + 1;
-}
-
-void position_cursor(struct State *state) {
-    if (state->mode != Edit && state->mode != Select)
-        return;
-    init_pair(2, COLOR_WHITE, COLOR_WHITE);
-    struct Window *window = state->window;
-    int w = state->edit.cursor_width / TICKS_PER_COLUMN;
-
-    int line = state->edit.layout.line_numbers[state->edit.measure] - state->edit.layout.top_row;
-
-    // Find x and y position
-    int x = state->edit.layout.offsets[state->edit.measure];
-    int y = 8 + (14 * line) + (2 * state->edit.string);
-
-    // Offset within measure
-    int offset_x = state->edit.x / TICKS_PER_COLUMN;
-
-    wmove(window->tab, y, x + offset_x);
-    wattron(window->tab, COLOR_PAIR(2));
-    for (int i = 0; i < w; ++i)
-        waddch(window->tab, ' ');
-    wattroff(window->tab, COLOR_PAIR(2));
-
-    wrefresh(window->tab);
 }
 
 
