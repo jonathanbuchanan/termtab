@@ -301,10 +301,10 @@ void draw_tab_key_prompt(struct State *state, char *buffer_key_center, char *buf
 }
 
 void draw_tab_technique_prompt(struct State *state, char *buffer) {
-    mvwprintw(state->window->tab, 3, 0, "Choose a technique (1=legato, 2=slide): ");
+    mvwprintw(state->window->tab, 3, 0, "Choose a technique (1=legato, 2=slide, 3=bend): ");
     wrefresh(state->window->tab);
     begin_input();
-    mvwgetstr(state->window->tab, 3, 40, buffer);
+    mvwgetstr(state->window->tab, 3, 48, buffer);
     end_input();
 
     wmove(state->window->tab, 3, 0);
@@ -324,21 +324,27 @@ int draw_measure(struct Window *w, int x, int y, struct Tab *t, int measure) {
         mvwprintw(w->tab, y + 1 + (2 * n->string), _x, "%d", n->fret);
         for (int j = 0; j < n->techniques_n; ++j) {
             struct Technique *tech = &n->techniques[j];
+            struct Note *receiver = &t->measures[tech->receiver_measure].notes[tech->receiver_note];
             char c = '\0';
             switch (tech->type) {
             case LegatoFrom:
                 // Are we moving up or down?
-                if (tech->receiver->fret > n->fret)
+                if (receiver->fret > n->fret)
                     c = 'p';
-                else if (tech->receiver->fret < n->fret)
+                else if (receiver->fret < n->fret)
                     c = 'h';
                 break;
             case SlideFrom:
                 // Are we moving up or down?
-                if (tech->receiver->fret > n->fret)
+                if (receiver->fret > n->fret)
                     c = '\\';
-                else if (tech->receiver->fret < n->fret)
+                else if (receiver->fret < n->fret)
                     c = '/';   
+                break;
+            case BendFrom:
+                c = 'b';
+                break;
+            default:
                 break;
             }
             if (c != '\0')

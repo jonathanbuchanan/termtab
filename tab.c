@@ -618,6 +618,7 @@ const char tuning_marker[4] = {0xFF, 0x00, 0x02, 0xFF};
 const char tab_marker[4] = {0xFF, 0x00, 0x03, 0xFF};
 const char measure_marker[4] = {0xFF, 0x00, 0x04, 0xFF};
 const char note_marker[4] = {0xFF, 0x00, 0x05, 0xFF};
+const char technique_marker[4] = {0xFF, 0x00, 0x06, 0xFF};
 const char end_marker[4] = {0xFF, 0xFF, 0xFF, 0xFF};
 
 bool compare_blocks(const char *a, const char *b) {
@@ -659,21 +660,58 @@ void process_tuning(struct Tab *t, FILE *f) {
     }
 }
 
+void process_technique(struct Technique *t, FILE *f) {
+    uint32_t type;
+    uint32_t t_measure;
+    uint32_t t_note;
+
+    fread(&type, sizeof(uint32_t), 1, f);
+    fread(&t_measure, sizeof(uint32_t), 1, f);
+    fread(&t_note, sizeof(uint32_t), 1, f);
+
+    t->type = type;
+    t->receiver_measure = t_measure;
+    t->receiver_note = t_note;
+}
+
 void process_note(struct Note *n, FILE *f) {
     uint8_t string;
     uint8_t fret;
     uint32_t offset;
     uint32_t length;
+    uint32_t techniques_n;
 
     fread(&string, sizeof(uint8_t), 1, f);
     fread(&fret, sizeof(uint8_t), 1, f);
     fread(&offset, sizeof(uint32_t), 1, f);
     fread(&length, sizeof(uint32_t), 1, f);
 
+    fread(&techniques_n, sizeof(uint32_t), 1, f);
+
+    n->techniques = malloc(sizeof(struct Technique) * techniques_n);
+
+    // Loop over blocks
+    int i = 0;
+    while (i < techniques_n) {
+        char block[4];
+        uint32_t block_length;
+        fread(block, sizeof(char), 4, f);
+        fread(&block_length, sizeof(uint32_t), 1, f);
+
+        if (compare_blocks(block, technique_marker)) { process_technique(&n->techniques[i], f); ++i; }
+        else {
+            // The block cannot be identified. skip to the next
+            fseek(f, block_length, SEEK_CUR);
+        }
+    }
+
     n->string = string;
     n->fret = fret;
     n->offset = offset;
     n->length = length;
+
+    n->techniques_n = techniques_n;
+    n->techniques_size = techniques_n;
 }
 
 void process_measure(struct Measure *m, FILE *f) {
@@ -886,7 +924,6 @@ void save_tab(const struct Tab *tab, const char *file) {
         uint8_t ts_top = m->ts_top;
         uint8_t ts_bottom = m->ts_bottom;
         uint32_t notes_n = m->notes_n;
-        //uint32_t techniques_n = m->techniques_n;
 
         uint8_t key_center_pitch = m->key.key_center.pitch;
         uint8_t key_center_shift = m->key.key_center.shift;
@@ -910,6 +947,7 @@ void save_tab(const struct Tab *tab, const char *file) {
             uint8_t fret = n->fret;
             uint32_t offset = n->offset;
             uint32_t length = n->length;
+            uint32_t techniques_n = n->techniques_n;
 
             fwrite(note_marker, sizeof(char), 4, f);
             fwrite(&note_length, sizeof(uint32_t), 1, f);
@@ -917,18 +955,26 @@ void save_tab(const struct Tab *tab, const char *file) {
             fwrite(&fret, sizeof(uint8_t), 1, f);
             fwrite(&offset, sizeof(uint32_t), 1, f);
             fwrite(&length, sizeof(uint32_t), 1, f);
+
+            fwrite(&techniques_n, sizeof(uint32_t), 1, f);
+            for (int k = 0; k < n->techniques_n; ++k) {
+                struct Technique *tech = &n->techniques[k];
+
+                // It's very important that the order of notes within measures is preserved here
+                // There are a lot of places this could get messed up!
+                // Fix them!
+                uint32_t technique_length = sizeof(char) + (sizeof(uint32_t) * 3);
+                uint32_t type = tech->type;
+                uint32_t t_measure = tech->receiver_measure;
+                uint32_t t_note = tech->receiver_note;
+
+                fwrite(technique_marker, sizeof(char), 4, f);
+                fwrite(&technique_length, sizeof(uint32_t), 1, f);
+                fwrite(&type, sizeof(uint32_t), 1, f);
+                fwrite(&t_measure, sizeof(uint32_t), 1, f);
+                fwrite(&t_note, sizeof(uint32_t), 1, f);
+            }
         }
-
-        /*fwrite(&techniques_n, sizeof(uint32_t), 1, f);
-        for (int j = 0; j < m->techniques_n; ++j) {
-            struct Technique *tech = &m->techniques[j];
-
-            uint32_t type = tech->type;
-            uint32_t m1;
-            uint32_t n1;
-            uint32_t m2;
-            uint32_t n2;
-        }*/
     }
 
 

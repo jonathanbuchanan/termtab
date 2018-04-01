@@ -105,12 +105,14 @@ void change_key(struct State *s) {
 
 enum TechniqueClass {
     Legato,
-    Slide
+    Slide,
+    Bend
 };
 
 struct TechniquePrototype {
     enum TechniqueClass class;
     int n_measure;
+    int n_note;
     int n_string;
     int n_offset;
     struct Note *note;
@@ -120,7 +122,7 @@ void add_technique(struct State *s) {
     char buff[256];
     draw_tab_technique_prompt(s, buff);
     int tech = strtol(buff, NULL, 10);
-    // 1=legato, 2=slide
+    // 1=legato, 2=slide, 3=bend
 
     struct TechniquePrototype *proto = malloc(sizeof(struct TechniquePrototype));
     bool second_note = false;
@@ -133,9 +135,13 @@ void add_technique(struct State *s) {
             proto->class = Slide;
             second_note = true;
             break;
+        case 3:
+            proto->class = Bend;
+            second_note = true;
     }
     struct Note *n = measure_get_note(s->tab, s->edit.measure, s->edit.string, s->edit.x);
     proto->n_measure = s->edit.measure;
+    proto->n_note = n - s->tab->measures[s->edit.measure].notes;
     proto->n_string = s->edit.string;
     proto->n_offset = s->edit.x;
     proto->note = n;
@@ -151,37 +157,59 @@ void add_technique(struct State *s) {
     
 }
 
-void add_technique_callback(struct State *s, struct Note *n, void *userdata) {
+void add_technique_callback(struct State *s, int measure, int note, void *userdata) {
     // Add the tech!
     struct TechniquePrototype proto = *(struct TechniquePrototype *)userdata;
 
-    struct Note *first;
-    struct Note *second;
+    int first_m;
+    int first_n;
+
+    int second_m;
+    int second_n;
     if (proto.n_measure < s->edit.measure) {
-        first = proto.note;
-        second = n;
+        first_m = proto.n_measure;
+        first_n = proto.n_note;
+
+        second_m = measure;
+        second_n = note;
     } else if (proto.n_measure > s->edit.measure) {
-        first = n;
-        second = proto.note;
+        first_m = measure;
+        first_n = note;
+
+        second_m = proto.n_measure;
+        second_n = proto.n_note;
     } else if (proto.n_offset < s->edit.x) {
-        first = proto.note;
-        second = n;
+        first_m = proto.n_measure;
+        first_n = proto.n_note;
+
+        second_m = measure;
+        second_n = note;
     } else if (proto.n_offset > s->edit.x) {
-        first = n;
-        second = proto.note;
+        first_m = measure;
+        first_n = note;
+
+        second_m = proto.n_measure;
+        second_n = proto.n_note;
     }
+
+    struct Note *first = &s->tab->measures[first_m].notes[first_n];
+    struct Note *second = &s->tab->measures[second_m].notes[second_n];
 
     struct Technique to;
     struct Technique from;
 
     switch (proto.class) {
     case Legato:
-        to = (struct Technique){LegatoTo, second};
-        from = (struct Technique){LegatoFrom, first};
+        to = (struct Technique){LegatoTo, second_m, second_n};
+        from = (struct Technique){LegatoFrom, first_m, first_n};
         break;
     case Slide:
-        to = (struct Technique){SlideTo, second};
-        from = (struct Technique){SlideFrom, first};
+        to = (struct Technique){SlideTo, second_m, second_n};
+        from = (struct Technique){SlideFrom, first_m, first_n};
+        break;
+    case Bend:
+        to = (struct Technique){BendTo, second_m, second_n};
+        from = (struct Technique){BendFrom, first_m, first_n};
         break;
     }
 
@@ -193,7 +221,7 @@ void add_technique_callback(struct State *s, struct Note *n, void *userdata) {
 
 
 
-void enter_select_mode(struct State *s, void (*callback)(struct State *s, struct Note *, void *userdata), void *userdata, int previousMode) {
+void enter_select_mode(struct State *s, void (*callback)(struct State *s, int measure, int note, void *userdata), void *userdata, int previousMode) {
     s->mode = Select;
     s->select.callback = callback;
     s->select.userdata = userdata;
@@ -202,8 +230,10 @@ void enter_select_mode(struct State *s, void (*callback)(struct State *s, struct
 
 void select_chosen(struct State *s) {
     struct Note *n = measure_get_note(s->tab, s->edit.measure, s->edit.string, s->edit.x);
+    int measure = s->edit.measure;
+    int note = n - s->tab->measures[measure].notes;
     if (n != NULL) {
-        (s->select.callback)(s, n, s->select.userdata);
+        (s->select.callback)(s, measure, note, s->select.userdata);
         // Leave select mode
         s->mode = s->select.previousMode;
     }

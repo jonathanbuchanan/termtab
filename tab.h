@@ -39,12 +39,15 @@ enum TechniqueType {
     LegatoTo,
     LegatoFrom,
     SlideTo,
-    SlideFrom
+    SlideFrom,
+    BendTo,
+    BendFrom
 };
 
 struct Technique {
     enum TechniqueType type;
-    struct Note *receiver;
+    int receiver_measure;
+    int receiver_note;
 };
 
 struct Note {
